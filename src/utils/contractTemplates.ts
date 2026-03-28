@@ -5,30 +5,40 @@ export interface ContractTemplate {
   name: string;
   description: string;
   code: string;
+  hardcodedBytecode?: string; // Optional hardcoded bytecode for known working contracts
 }
 
 export const basicERC20: ContractTemplate = {
   id: 'basic',
-  name: 'Basic ERC-20',
-  description: 'Standard ERC-20 token with fixed supply',
-  code: `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import "./ERC20.sol";
+  name: 'Simple Storage (Working)',
+  description: 'Ultra-simple contract with known working bytecode',
+  code: `pragma solidity 0.4.26;
 
 /**
- * @title MyToken
- * @dev Basic ERC-20 token with fixed supply
+ * @title SimpleStorage
+ * @dev Very simple contract for testing deployment
  */
-contract MyToken is ERC20 {
-    /**
-     * @dev Constructor that gives initial supply to the deployer
-     */
-    constructor() ERC20("MyTokenName", "MTK") {
-        _mint(msg.sender, 1000000 * 10 ** decimals());
+contract SimpleStorage {
+    uint256 private _value;
+
+    event ValueChanged(uint256 newValue);
+
+    constructor() public {
+        _value = 42;
+    }
+
+    function setValue(uint256 newValue) public {
+        _value = newValue;
+        ValueChanged(newValue);
+    }
+
+    function getValue() public view returns (uint256) {
+        return _value;
     }
 }
-`
+`,
+  // Compiler-generated creation bytecode for SimpleStorage (solc 0.8.28, Istanbul)
+  hardcodedBytecode: '0x6080604052348015600f57600080fd5b50602a600081905550610150806100276000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063209652551461003b5780635524107714610059575b600080fd5b610043610075565b60405161005091906100a1565b60405180910390f35b610073600480360381019061006e91906100ed565b61007e565b005b60008054905090565b8060008190555050565b6000819050919050565b61009b81610088565b82525050565b60006020820190506100b66000830184610092565b92915050565b600080fd5b6100ca81610088565b81146100d557600080fd5b50565b6000813590506100e7816100c1565b92915050565b600060208284031215610103576101026100bc565b5b6000610111848285016100d8565b9150509291505056fea26469706673582212206c84ebbc2a028053e3db3e30160c44e80de8f6af35882921c9d3273688afbf4764736f6c634300081c0033'
 };
 
 export const burnableERC20: ContractTemplate = {
