@@ -1,12 +1,8 @@
 import React from 'react';
-import DeploymentGuide from './DeploymentGuide';
+import IDELayout from './components/IDELayout';
 
 function App() {
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <DeploymentGuide />
-    </div>
-  );
+  return <IDELayout />;
 }
 
 export default App;
