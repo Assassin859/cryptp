@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileCode, Globe, Check, AlertTriangle, Wallet } from 'lucide-react';
 import SolidityEditor from './SolidityEditor';
 import ContractFileBrowser from './ContractFileBrowser';
@@ -6,15 +6,35 @@ import SimulatedChain from './SimulatedChain';
 import { SimulatedDeployment } from '../types';
 import { allTemplates } from '../utils/contractTemplates';
 import { CompileResult } from '../utils/hardhatCompiler';
+import {
+  Project,
+  getProjects,
+  createProject,
+  updateProject,
+  saveCompilation,
+  saveDeployment,
+  migrateLocalStorageToSupabase
+} from '../utils/userData';
 
-const IDELayout: React.FC = () => {
+interface IDELayoutProps {
+  userId: string;
+}
+
+const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
   const [activeSection, setActiveSection] = useState<'docs' | 'code'>('code');
   const [showRightPanel, setShowRightPanel] = useState<'editor' | 'contracts' | 'simulated'>('editor');
+
+  const storageKey = (key: string) => `cryptp-${userId}-${key}`;
+
+  // Projects state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   const [simulations, setSimulations] = useState<SimulatedDeployment[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
-      const saved = window.localStorage.getItem('cryptp-simulations');
+      const saved = window.localStorage.getItem(storageKey('simulations'));
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -24,16 +44,16 @@ const IDELayout: React.FC = () => {
   // Move SolidityEditor state here to persist across panel switches
   const [code, setCode] = useState<string>(() => {
     if (typeof window === 'undefined') return allTemplates[0].code;
-    return window.localStorage.getItem('cryptp-code') || allTemplates[0].code;
+    return window.localStorage.getItem(storageKey('code')) || allTemplates[0].code;
   });
   const [selectedTemplate, setSelectedTemplate] = useState<string>(() => {
     if (typeof window === 'undefined') return 'basic';
-    return window.localStorage.getItem('cryptp-selectedTemplate') || 'basic';
+    return window.localStorage.getItem(storageKey('selectedTemplate')) || 'basic';
   });
   const [compileResult, setCompileResult] = useState<CompileResult | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
-      const saved = window.localStorage.getItem('cryptp-compileResult');
+      const saved = window.localStorage.getItem(storageKey('compileResult'));
       return saved ? (JSON.parse(saved) as CompileResult) : null;
     } catch {
       return null;
@@ -41,30 +61,111 @@ const IDELayout: React.FC = () => {
   });
   const [isCompiling, setIsCompiling] = useState(false);
 
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('cryptp-code', code);
-    window.localStorage.setItem('cryptp-selectedTemplate', selectedTemplate);
-    try {
-      if (compileResult) {
-        window.localStorage.setItem('cryptp-compileResult', JSON.stringify(compileResult));
-      } else {
-        window.localStorage.removeItem('cryptp-compileResult');
-      }
-    } catch {
-      // ignore serialization issues
+  // Load projects and migrate data on mount
+  useEffect(() => {
+    if (!userId) {
+      setProjects([]);
+      setCurrentProject(null);
+      setCode(allTemplates[0].code);
+      setSelectedTemplate('basic');
+      setSimulations([]);
+      setCompileResult(null);
+      setIsLoadingProjects(false);
+      return;
     }
-  }, [code, selectedTemplate, compileResult]);
 
-  console.log('IDELayout state:', { codeLength: code?.length, selectedTemplate, hasCompileResult: !!compileResult, showRightPanel });
+    const loadUserData = async () => {
+      setIsLoadingProjects(true);
+      try {
+        // Migrate any existing localStorage data to Supabase
+        await migrateLocalStorageToSupabase(userId);
+
+        // Load projects from Supabase
+        const userProjects = await getProjects(userId);
+        setProjects(userProjects);
+
+        // Set current project (most recent or create default)
+        if (userProjects.length > 0) {
+          const mostRecent = userProjects[0];
+          setCurrentProject(mostRecent);
+          setCode(mostRecent.code);
+          setSelectedTemplate(mostRecent.template);
+        } else {
+          // Create default project
+          const defaultProject = await createProject(userId, {
+            name: 'My First Project',
+            code: allTemplates[0].code,
+            template: 'basic'
+          });
+          setCurrentProject(defaultProject);
+          setProjects([defaultProject]);
+        }
+      } catch (error) {
+        console.error('Failed to load user data:', error);
+        // Fallback to localStorage if Supabase fails
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    };
+
+    loadUserData();
+  }, [userId]);
+
+  // Save code changes to Supabase
+  useEffect(() => {
+    if (!currentProject || isLoadingProjects) return;
+
+    const saveCode = async () => {
+      try {
+        await updateProject(currentProject.id, { code, template: selectedTemplate });
+      } catch (error) {
+        console.error('Failed to save code:', error);
+      }
+    };
+
+    // Debounce saves
+    const timeoutId = setTimeout(saveCode, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [code, selectedTemplate, currentProject, isLoadingProjects]);
+
+  // Save compile results to Supabase
+  useEffect(() => {
+    if (!currentProject || !compileResult) return;
+
+    const saveCompileResult = async () => {
+      try {
+        await saveCompilation(userId, currentProject.id, compileResult);
+      } catch (error) {
+        console.error('Failed to save compilation:', error);
+      }
+    };
+
+    saveCompileResult();
+  }, [compileResult, currentProject, userId]);
+
+  console.log('IDELayout state:', { userId, currentProject: currentProject?.id, projectsCount: projects.length, codeLength: code?.length, selectedTemplate, hasCompileResult: !!compileResult, showRightPanel });
 
   const addSimulation = (entry: SimulatedDeployment) => {
     console.log('Adding simulation:', entry);
     setSimulations((prev) => {
       const next = [entry, ...prev];
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem('cryptp-simulations', JSON.stringify(next));
+        window.localStorage.setItem(storageKey('simulations'), JSON.stringify(next));
       }
+
+      // Save to Supabase
+      if (currentProject) {
+        saveDeployment(userId, currentProject.id, {
+          simulated_chain: entry,
+          network: entry.network,
+          tx_hash: entry.transactionHash,
+          contract_address: entry.contractAddress,
+          status: entry.status,
+          gas_used: entry.gasUsed,
+          deployer: entry.deployer
+        }).catch(error => console.error('Failed to save deployment:', error));
+      }
+
       return next;
     });
   };

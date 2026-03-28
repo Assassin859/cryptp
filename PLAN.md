@@ -108,21 +108,66 @@ npm install --save-dev @nomicfoundation/hardhat-ethers ethers @types/node dotenv
 
 ---
 
-## Phase 3: Local Development Environment ⭐⭐
+## Phase 3: User Authentication & Data Isolation with Supabase ⭐⭐⭐
 
-### 3.1 Hardhat Network Integration
+### 3.1 Supabase Setup
+- [ ] Create Supabase project and configure
+- [ ] Set up authentication providers (Email, Google, GitHub)
+- [ ] Configure environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+- [ ] Install Supabase client libraries (@supabase/supabase-js)
+
+### 3.2 Database Schema
+- [ ] Create `users` table (profiles, preferences)
+- [ ] Create `projects` table (user code, templates, metadata)
+- [ ] Create `compilations` table (compile results, ABI, bytecode)
+- [ ] Create `deployments` table (simulated deployments, blockchain records)
+- [ ] Create `simulated_chain` table (blockchains per user)
+- [ ] Set up row-level security (RLS) policies
+
+### 3.3 Authentication Components
+- [ ] Create Login component
+- [ ] Create Sign-up component
+- [ ] Create User profile/settings component
+- [ ] Implement logout functionality
+- [ ] Add session persistence
+
+### 3.4 Data Migration
+- [ ] Replace localStorage with Supabase queries
+- [ ] Migrate user code storage to `projects` table
+- [ ] Migrate compile results to `compilations` table
+- [ ] Migrate simulations to `deployments` & `simulated_chain` tables
+- [ ] Implement data sync from localStorage to Supabase
+
+### 3.5 User-Scoped Features
+- [ ] User-specific code editors per project
+- [ ] Per-user simulated blockchains
+- [ ] User deployment history
+- [ ] User compile history
+- [ ] User project management (create, delete, rename)
+
+### 3.6 Security & RLS
+- [ ] Implement row-level security policies
+- [ ] Ensure users can only access their own data
+- [ ] Add auth guards to API calls
+- [ ] Validate all transactions on server-side
+
+---
+
+## Phase 4: Local Development Environment ⭐⭐
+
+### 4.1 Hardhat Network Integration
 - [ ] Set up local blockchain network
 - [ ] Create deployment scripts for local testing
 - [ ] Add contract deployment tracking
 - [ ] Implement local network status monitoring
 
-### 3.2 Development Scripts
+### 4.2 Development Scripts
 - [ ] `npm run compile` - Compile all contracts
 - [ ] `npm run test` - Run test suites
 - [ ] `npm run deploy:local` - Deploy to local network
 - [ ] `npm run clean` - Clean build artifacts
 
-### 3.3 Local Testing Framework
+### 4.3 Local Testing Framework
 - [ ] Create basic test templates
 - [ ] Add test runner integration
 - [ ] Display test results in UI
@@ -130,21 +175,21 @@ npm install --save-dev @nomicfoundation/hardhat-ethers ethers @types/node dotenv
 
 ---
 
-## Phase 4: Deployment & Network Management ⭐⭐
+## Phase 5: Deployment & Network Management ⭐⭐
 
-### 4.1 Multi-Network Configuration
+### 5.1 Multi-Network Configuration
 - [ ] Configure testnet connections (Sepolia, Goerli, Mumbai)
 - [ ] Add mainnet configuration (with safety checks)
 - [ ] Implement network switching
 - [ ] Add gas price monitoring
 
-### 4.2 Deployment Scripts
+### 5.2 Deployment Scripts
 - [ ] Create reusable deployment scripts
 - [ ] Add contract verification scripts
 - [ ] Implement multi-contract deployment
 - [ ] Add deployment history tracking
 
-### 4.3 Wallet Integration Enhancement
+### 5.3 Wallet Integration Enhancement
 - [ ] Improve MetaMask connection
 - [ ] Add wallet network validation
 - [ ] Implement transaction signing
@@ -152,21 +197,21 @@ npm install --save-dev @nomicfoundation/hardhat-ethers ethers @types/node dotenv
 
 ---
 
-## Phase 5: Contract Interaction Tools ⭐
+## Phase 6: Contract Interaction Tools ⭐
 
-### 5.1 Contract Reader/Writer
+### 6.1 Contract Reader/Writer
 - [ ] Create contract interaction panel
 - [ ] Implement function calling interface
 - [ ] Add event monitoring
 - [ ] Display contract state variables
 
-### 5.2 Token-Specific Features
+### 6.2 Token-Specific Features
 - [ ] ERC-20 balance checking
 - [ ] Token transfer interface
 - [ ] Approval management
 - [ ] Token metadata display
 
-### 5.3 Advanced Interaction
+### 6.3 Advanced Interaction
 - [ ] Batch transaction support
 - [ ] Contract upgradeability tools
 - [ ] Multi-signature wallet integration
@@ -174,21 +219,21 @@ npm install --save-dev @nomicfoundation/hardhat-ethers ethers @types/node dotenv
 
 ---
 
-## Phase 6: Testing & Quality Assurance ⭐
+## Phase 7: Testing & Quality Assurance ⭐
 
-### 6.1 Test Framework Integration
+### 7.1 Test Framework Integration
 - [ ] Set up Hardhat test environment
 - [ ] Create comprehensive test suites
 - [ ] Add fuzz testing capabilities
 - [ ] Implement property-based testing
 
-### 6.2 Code Quality Tools
+### 7.2 Code Quality Tools
 - [ ] Add Solidity linter integration
 - [ ] Implement code coverage reporting
 - [ ] Add security analysis tools
 - [ ] Create code quality dashboards
 
-### 6.3 CI/CD Pipeline
+### 7.3 CI/CD Pipeline
 - [ ] Set up automated testing
 - [ ] Add deployment verification
 - [ ] Implement contract size limits
@@ -196,7 +241,7 @@ npm install --save-dev @nomicfoundation/hardhat-ethers ethers @types/node dotenv
 
 ---
 
-## Phase 7: Advanced Features ⭐
+## Phase 8: Advanced Features ⭐
 
 ### 7.1 Plugin Ecosystem
 - [ ] Hardhat plugin integration
