@@ -35,6 +35,7 @@ export interface CompilationResult {
   contractSize?: number;
   gasEstimate?: number;
   isMockResult?: boolean; // Indicates if this is mock data due to browser limitations
+  isHardcoded?: boolean; // Indicates if this is hardcoded bytecode
 }
 
 // Basic syntax validation for Solidity (works in browser)
@@ -173,9 +174,11 @@ const compileInBrowser = (sourceCode: string, contractName: string = 'Contract')
     }
 
     // Generate mock bytecode (simulating real compilation)
+    // Generate valid basic bytecode (minimal contract that returns 42)
+    // 602a60005260206000f3 (PUSH1 0x2a, PUSH1 0, MSTORE, PUSH1 32, PUSH1 0, RETURN)
     const mockBytecode =
-      '0x608060405234801561001057600080fd5b50d3801561001d57600080fd5b50d2801561002a57600080fd5b5060' +
-      Array(200)
+      '0x6080604052348015600f57600080fd5b50602a60005260206000f3' +
+      Array(100)
         .fill(0)
         .map(() => Math.floor(Math.random() * 16).toString(16))
         .join('');

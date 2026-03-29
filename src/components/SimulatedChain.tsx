@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { SimulatedDeployment } from '../types';
-import { List, Clock11, MapPin, CheckCircle, Link, Hash, User, Zap } from 'lucide-react';
+import { List, Clock11, MapPin, CheckCircle, Link, Hash, User, Zap, Trash2, Activity } from 'lucide-react';
 
 interface SimulatedChainProps {
   deployments: SimulatedDeployment[];
+  onReset?: () => void;
+  onInteract?: (deployment: SimulatedDeployment) => void;
 }
 
-const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments }) => {
+const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments, onReset, onInteract }) => {
   console.log('SimulatedChain render:', { deploymentsCount: deployments.length, deployments });
   const [hoveredBlock, setHoveredBlock] = useState<number | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
@@ -47,9 +49,21 @@ const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments }) => {
 
   return (
     <div className="h-full flex flex-col bg-gray-950 border border-gray-700 rounded-lg overflow-hidden">
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center gap-2">
-        <Link className="h-4 w-4 text-blue-300" />
-        <h3 className="text-sm font-semibold text-white">Blockchain Visualization</h3>
+      <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Link className="h-4 w-4 text-blue-300" />
+          <h3 className="text-sm font-semibold text-white">Blockchain Visualization</h3>
+        </div>
+        {onReset && (
+          <button
+            onClick={onReset}
+            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-900/20 rounded-md transition-all flex items-center gap-1.5 text-xs font-medium"
+            title="Reset Simulated Chain"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Reset Chain</span>
+          </button>
+        )}
       </div>
 
       <div className="p-4 text-xs text-gray-300">
@@ -179,6 +193,19 @@ const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments }) => {
                               {deployment.status}
                             </span>
                           </div>
+
+                          {onInteract && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onInteract(deployment);
+                              }}
+                              className="mt-2 flex items-center justify-center gap-2 w-full py-1.5 bg-green-600/20 text-green-300 border border-green-500/40 rounded hover:bg-green-600/30 transition-all text-[10px] font-bold uppercase tracking-wider"
+                            >
+                              <Activity className="h-3 w-3" />
+                              Interact with Contract
+                            </button>
+                          )}
                         </div>
 
                         {/* Arrow removed - now positioned to the right */}

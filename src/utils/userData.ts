@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { SimulatedDeployment } from '../types';
-import { CompileResult } from '../utils/hardhatCompiler';
+import { CompilationResult } from '../utils/hardhatCompiler';
 
 export interface Project {
   id: string;
@@ -16,7 +16,7 @@ export interface Compilation {
   id: string;
   user_id: string;
   project_id?: string;
-  result: CompileResult;
+  result: CompilationResult;
   compiled_at: string;
 }
 
@@ -79,7 +79,7 @@ export const deleteProject = async (projectId: string) => {
 };
 
 // Compilations CRUD
-export const saveCompilation = async (userId: string, projectId: string | undefined, result: CompileResult) => {
+export const saveCompilation = async (userId: string, projectId: string | undefined, result: CompilationResult) => {
   const { data, error } = await supabase
     .from('compilations')
     .insert([{ user_id: userId, project_id: projectId, result }])
@@ -132,6 +132,16 @@ export const getDeployments = async (userId: string, projectId?: string): Promis
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+};
+
+export const deleteDeployments = async (userId: string, projectId: string) => {
+  const { error } = await supabase
+    .from('deployments')
+    .delete()
+    .eq('user_id', userId)
+    .eq('project_id', projectId);
+
+  if (error) throw error;
 };
 
 // Migration helpers for localStorage to Supabase

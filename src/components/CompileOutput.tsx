@@ -4,6 +4,8 @@ import { ethers, ContractFactory, getCreateAddress } from 'ethers';
 import { SimulatedDeployment } from '../types';
 import { AlertTriangle, CheckCircle, Copy, ChevronDown, ChevronUp, Zap, Rocket, Loader, FileCode, Database, DollarSign } from 'lucide-react';
 
+
+
 interface CompileOutputProps {
   result: CompilationResult;
   code?: string;
@@ -55,14 +57,15 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
     try {
       // Request account access - this should trigger MetaMask popup
       console.log('Requesting MetaMask account access...');
+      if (!window.ethereum) throw new Error('MetaMask not found');
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       console.log('MetaMask account access granted');
       
       // Use ethers v6 BrowserProvider
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider(window.ethereum as any);
       const network = await provider.getNetwork();
 
-      const requiredChainId = 11155111; // Sepolia
+      const requiredChainId = BigInt(11155111); // Sepolia
       if (network.chainId !== requiredChainId) {
         try {
           await window.ethereum.request({
@@ -89,11 +92,13 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
         }
       }
 
+
       const signer = await provider.getSigner();
       
       // Try the standard ContractFactory approach first (skip if hardcoded bytecode)
-      let contractAddress: string;
+      let contractAddress = '';
       let receipt: any;
+
       
       if (!result.isHardcoded) {
         try {
@@ -105,12 +110,13 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
           
           // Get transaction receipt
           const deployTx = deployment.deploymentTransaction();
-          if (deployTx.hash) {
+          if (deployTx && deployTx.hash) {
             receipt = await provider.waitForTransaction(deployTx.hash);
           } else {
             throw new Error('No transaction hash available');
           }
           console.log('Standard deployment successful');
+
         } catch (factoryError: any) {
           console.warn('Standard deployment failed, trying manual transaction approach:', factoryError.message);
           // Continue to manual deployment
@@ -118,7 +124,9 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
       }
       
       // Manual transaction deployment (always used for hardcoded bytecode)
-      if (!contractAddress) {
+      let finalContractAddress = contractAddress;
+      if (!finalContractAddress) {
+
         console.log('Attempting manual transaction deployment...');
         
         // Create transaction data for deployment
@@ -162,17 +170,20 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
         // Calculate contract address
         const deployerAddress = await signer.getAddress();
         const nonce = await provider.getTransactionCount(deployerAddress, 'latest');
-        contractAddress = getCreateAddress({
+        const calculatedAddress = getCreateAddress({
           from: deployerAddress,
           nonce: nonce - 1 // -1 because nonce was already incremented
         });
         
         console.log('Manual deployment successful');
+        finalContractAddress = calculatedAddress;
       }
+
 
       const deployer = await signer.getAddress();
       const deploymentEntry: SimulatedDeployment = {
-        contractAddress: contractAddress,
+        contractAddress: finalContractAddress,
+
         transactionHash: receipt.hash,
         network: 'Sepolia',
         blockNumber: receipt.blockNumber,
@@ -206,15 +217,18 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
     setDeploymentResult(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      console.log('Deploying to In-Browser EVM...');
+      const { browserVM } = await import('../utils/browserVM');
+      const deployResult = await browserVM.deployContract(result.bytecode);
+      const blockNumber = await browserVM.getBlockNumber();
 
       const simulated: SimulatedDeployment = {
-        contractAddress: '0x' + Math.random().toString(16).slice(2, 42),
-        transactionHash: '0x' + Math.random().toString(16).slice(2, 66),
+        contractAddress: deployResult.contractAddress,
+        transactionHash: deployResult.transactionHash,
         network: 'Local Simulation',
-        blockNumber: Math.floor(10000000 + Math.random() * 5000),
-        gasUsed: result.gasEstimate || 200000,
-        deployer: '0x0000000000000000000000000000000000000000',
+        blockNumber: blockNumber,
+        gasUsed: deployResult.gasUsed,
+        deployer: '0x89f97Cb35236a1d0190FB25B31C5C0fF4107Ec1b',
         timestamp: new Date().toISOString(),
         status: 'confirmed',
         isRealChain: false
@@ -233,6 +247,11 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
   const onDeployClick = async () => {
     await deployWithMetaMask();
   };
+
+  const onDeployLocalClick = async () => {
+    await deployLocalSimulation();
+  };
+
 
   if (!result.success) {
     // Show errors for failed compilation
@@ -326,8 +345,9 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
                 <div className="bg-black/30 p-3 rounded">
                   <div className="text-xs text-gray-500 mb-1">Functions</div>
                   <div className="text-sm font-mono text-blue-300">
-                    {result.abi?.filter(item => item.type === 'function').length || 0} functions
+                    {result.abi?.filter((item: any) => item.type === 'function').length || 0} functions
                   </div>
+
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-3">
@@ -356,34 +376,51 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
 
             {!deploymentResult && !deploymentError && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-                  <div className={`w-2 h-2 rounded-full ${isMetaMaskAvailable() ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  {isMetaMaskAvailable() ? 'MetaMask detected' : 'MetaMask not detected - will use simulation'}
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={onDeployLocalClick}
+                    disabled={isDeploying}
+                    className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white rounded flex flex-col items-center justify-center transition shadow-lg shadow-indigo-900/20 group"
+                  >
+                    <div className="flex items-center gap-2 font-bold">
+                       {isDeploying ? <Loader className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 text-yellow-400 group-hover:scale-110 transition" />}
+                       Deploy to Local Sandbox
+                    </div>
+                    <span className="text-[10px] text-indigo-200 opacity-70">Zero-Install • Instant Execution</span>
+                  </button>
+
+                  <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-800"></span></div>
+                    <div className="relative flex justify-center text-[10px] uppercase font-bold text-gray-600"><span className="bg-gray-950 px-2">OR</span></div>
+                  </div>
+
+                  <button
+                    onClick={onDeployClick}
+                    disabled={isDeploying || !isMetaMaskAvailable()}
+                    className={`w-full px-4 py-2 rounded flex items-center justify-center gap-2 transition border ${
+                      isMetaMaskAvailable() 
+                        ? 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20' 
+                        : 'bg-gray-900/50 border-gray-800 text-gray-600 cursor-not-allowed'
+                    }`}
+                  >
+                    <Rocket className="h-4 w-4" />
+                    <span className="text-xs font-semibold">Deploy to Sepolia (Testnet)</span>
+                  </button>
                 </div>
-                <button
-                  onClick={onDeployClick}
-                  disabled={isDeploying}
-                  className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-2 transition"
-                >
-                  {isDeploying ? (
-                    <>
-                      <Loader className="h-4 w-4 animate-spin" />
-                      Deploying...
-                    </>
-                  ) : (
-                    <>
-                      <Rocket className="h-4 w-4" />
-                      {isMetaMaskAvailable() ? 'Deploy to Sepolia (MetaMask)' : 'Deploy (Local Simulation)'}
-                    </>
-                  )}
-                </button>
-                <div className="text-xs text-gray-400 text-center">
-                  {isMetaMaskAvailable() 
-                    ? '🚀 Connect MetaMask and deploy to Sepolia testnet'
-                    : '🚀 MetaMask not found - deploying to local simulation'
-                  }
-                </div>
+
+                {!isMetaMaskAvailable() && (
+                  <div className="bg-orange-900/10 border border-orange-900/30 p-2 rounded flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5" />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-orange-300 font-bold">MetaMask Not Found</span>
+                      <span className="text-[9px] text-gray-500">Testnet deployment requires an extension. 
+                        <a href="https://metamask.io/download/" target="_blank" rel="noreferrer" className="text-orange-400 underline ml-1">Install MetaMask</a>
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
+
             )}
 
             {deploymentResult && (

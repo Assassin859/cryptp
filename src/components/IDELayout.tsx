@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { FileCode, Globe, Check, AlertTriangle, Wallet } from 'lucide-react';
+import { FileCode, Globe, Check, AlertTriangle, Wallet, LogOut, ShieldCheck, Download, Zap, ExternalLink } from 'lucide-react';
+
+
+
+import { supabase } from '../utils/supabaseClient';
 import SolidityEditor from './SolidityEditor';
 import ContractFileBrowser from './ContractFileBrowser';
 import SimulatedChain from './SimulatedChain';
+import ContractInteraction from './ContractInteraction';
 import { SimulatedDeployment } from '../types';
 import { allTemplates } from '../utils/contractTemplates';
-import { CompileResult } from '../utils/hardhatCompiler';
+import { CompilationResult } from '../utils/hardhatCompiler';
 import {
   Project,
   getProjects,
+  getCompilations,
+  getDeployments,
+  deleteDeployments,
   createProject,
   updateProject,
   saveCompilation,
@@ -20,46 +28,28 @@ interface IDELayoutProps {
   userId: string;
 }
 
-const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
+const IDELayout: React.FC<IDELayoutProps> = ({ userId }: IDELayoutProps) => {
   const [activeSection, setActiveSection] = useState<'docs' | 'code'>('code');
-  const [showRightPanel, setShowRightPanel] = useState<'editor' | 'contracts' | 'simulated'>('editor');
+  const [showRightPanel, setShowRightPanel] = useState<'editor' | 'contracts' | 'simulated' | 'interact'>('editor');
 
-  const storageKey = (key: string) => `cryptp-${userId}-${key}`;
 
   // Projects state
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
-  const [simulations, setSimulations] = useState<SimulatedDeployment[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = window.localStorage.getItem(storageKey('simulations'));
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [simulations, setSimulations] = useState<SimulatedDeployment[]>([]);
 
   // Move SolidityEditor state here to persist across panel switches
-  const [code, setCode] = useState<string>(() => {
-    if (typeof window === 'undefined') return allTemplates[0].code;
-    return window.localStorage.getItem(storageKey('code')) || allTemplates[0].code;
-  });
-  const [selectedTemplate, setSelectedTemplate] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'basic';
-    return window.localStorage.getItem(storageKey('selectedTemplate')) || 'basic';
-  });
-  const [compileResult, setCompileResult] = useState<CompileResult | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const saved = window.localStorage.getItem(storageKey('compileResult'));
-      return saved ? (JSON.parse(saved) as CompileResult) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [code, setCode] = useState<string>(allTemplates[0].code);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('basic');
+  const [compileResult, setCompileResult] = useState<CompilationResult | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
+  const [activeDeployment, setActiveDeployment] = useState<{ address: string; abi: any[]; network: string } | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [hasWallet, setHasWallet] = useState<boolean>(false);
+  const [showWalletBanner, setShowWalletBanner] = useState<boolean>(true);
+
 
   // Load projects and migrate data on mount
   useEffect(() => {
@@ -90,6 +80,38 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
           setCurrentProject(mostRecent);
           setCode(mostRecent.code);
           setSelectedTemplate(mostRecent.template);
+
+          // Fetch the latest compilation history for this project
+          const projectCompilations = await getCompilations(userId, mostRecent.id);
+          if (projectCompilations.length > 0) {
+              setCompileResult(projectCompilations[0].result);
+          } else {
+              setCompileResult(null);
+          }
+
+          // Fetch deployment history for this project
+          const projectDeployments = await getDeployments(userId, mostRecent.id);
+          
+          // Use a Map to filter by transactionHash to ensure uniqueness
+          const uniqueDeployments = new Map();
+          projectDeployments.forEach(d => {
+            const txHash = d.tx_hash || '';
+            if (txHash && !uniqueDeployments.has(txHash)) {
+              uniqueDeployments.set(txHash, d.simulated_chain || {
+                network: d.network,
+                transactionHash: d.tx_hash || '',
+                contractAddress: d.contract_address || '',
+                status: (d.status === 'success' || d.status === 'confirmed') ? 'confirmed' : (d.status === 'failed' ? 'failed' : 'pending'),
+                gasUsed: Number(d.gas_used) || 0,
+                deployer: d.deployer || '',
+                timestamp: d.timestamp,
+                blockNumber: 0,
+                isRealChain: false
+              });
+            }
+          });
+          
+          setSimulations(Array.from(uniqueDeployments.values()));
         } else {
           // Create default project
           const defaultProject = await createProject(userId, {
@@ -99,10 +121,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
           });
           setCurrentProject(defaultProject);
           setProjects([defaultProject]);
+          setSimulations([]);
+          setCompileResult(null);
         }
       } catch (error) {
-        console.error('Failed to load user data:', error);
-        // Fallback to localStorage if Supabase fails
+        console.error('Failed to load user data from Supabase:', error);
+        // Fallback or error state could be added here
       } finally {
         setIsLoadingProjects(false);
       }
@@ -110,6 +134,22 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
 
     loadUserData();
   }, [userId]);
+
+  // Wallet detection
+  useEffect(() => {
+    const checkWallet = () => {
+      const isAvailable = typeof window !== 'undefined' && !!window.ethereum;
+      setHasWallet(isAvailable);
+    };
+
+    checkWallet();
+    // Listen for provider changes if possible
+    if (window.ethereum) {
+       window.ethereum.on('accountsChanged', checkWallet);
+       return () => window.ethereum?.removeListener('accountsChanged', checkWallet);
+    }
+  }, []);
+
 
   // Save code changes to Supabase
   useEffect(() => {
@@ -134,6 +174,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
 
     const saveCompileResult = async () => {
       try {
+        // Only save if it's a new compile (e.g., successful)
+        // Check if we already have this compilation saved (optional optimization)
         await saveCompilation(userId, currentProject.id, compileResult);
       } catch (error) {
         console.error('Failed to save compilation:', error);
@@ -145,29 +187,69 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
 
   console.log('IDELayout state:', { userId, currentProject: currentProject?.id, projectsCount: projects.length, codeLength: code?.length, selectedTemplate, hasCompileResult: !!compileResult, showRightPanel });
 
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      // Clear localStorage items prefixed with cryptp-
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('cryptp-'))
+        .forEach(key => localStorage.removeItem(key));
+      // Refresh to ensure all states are reset (since App handles the redirect)
+      window.location.reload();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
   const addSimulation = (entry: SimulatedDeployment) => {
     console.log('Adding simulation:', entry);
+    // 1. Update local state immediately for fast UI
     setSimulations((prev) => {
-      const next = [entry, ...prev];
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(storageKey('simulations'), JSON.stringify(next));
-      }
-
-      // Save to Supabase
-      if (currentProject) {
-        saveDeployment(userId, currentProject.id, {
-          simulated_chain: entry,
-          network: entry.network,
-          tx_hash: entry.transactionHash,
-          contract_address: entry.contractAddress,
-          status: entry.status,
-          gas_used: entry.gasUsed,
-          deployer: entry.deployer
-        }).catch(error => console.error('Failed to save deployment:', error));
-      }
-
-      return next;
+      const isDuplicate = prev.some(s => s.transactionHash === entry.transactionHash);
+      if (isDuplicate) return prev;
+      return [entry, ...prev];
     });
+
+    // 2. Perform side effect OUTSIDE of state updater
+    if (currentProject) {
+      saveDeployment(userId, currentProject.id, {
+        simulated_chain: entry,
+        network: entry.network,
+        tx_hash: entry.transactionHash,
+        contract_address: entry.contractAddress,
+        status: entry.status,
+        gas_used: entry.gasUsed,
+        deployer: entry.deployer
+      })
+      .then(() => console.log('Deployment saved to Supabase'))
+      .catch(error => console.error('Failed to save deployment:', error));
+    }
+
+    // 3. Update interaction panel
+    setActiveDeployment({
+      address: entry.contractAddress,
+      abi: compileResult?.abi || [],
+      network: entry.network
+    });
+    setShowRightPanel('interact');
+  };
+
+  const handleResetChain = async () => {
+    if (!currentProject) return;
+    
+    try {
+      const { browserVM } = await import('../utils/browserVM');
+      await browserVM.reset();
+      
+      // Clear from database
+      await deleteDeployments(userId, currentProject.id);
+      
+      setSimulations([]);
+      setShowResetConfirm(false);
+      console.log('Simulated chain and history cleared.');
+    } catch (error) {
+      console.error('Failed to reset simulated chain:', error);
+    }
   };
 
   const documentationPanel = (
@@ -287,7 +369,56 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
           </ol>
         </div>
 
+        <div className="bg-blue-900/30 backdrop-blur-sm p-6 rounded-xl border border-blue-500/50 hover:shadow-blue-500/10 transition-all">
+          <div className="flex items-center mb-4">
+            <div className="h-10 w-10 bg-blue-500/20 rounded-lg flex items-center justify-center mr-4">
+              <ShieldCheck className="h-6 w-6 text-blue-400" />
+            </div>
+            <h2 className="text-xl font-bold">MetaMask & Wallet Setup</h2>
+          </div>
+          <p className="text-gray-300 mb-6 leading-relaxed">
+            To move beyond the local simulation and deploy your tokens to real test networks like Sepolia, you need a Web3 wallet.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-black/30 p-4 rounded-lg border border-gray-700">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                1. Install Extension
+              </h3>
+              <p className="text-xs text-gray-400 mb-3">Grab the official extension for your browser:</p>
+              <div className="flex flex-wrap gap-2">
+                <a href="https://metamask.io/download/" target="_blank" rel="noreferrer" className="px-3 py-1.5 bg-orange-600/20 hover:bg-orange-600/40 text-orange-400 rounded text-[10px] font-bold border border-orange-500/30 flex items-center gap-1">
+                   MetaMask (Chrome/Brave) <ExternalLink className="h-3 w-3" />
+                </a>
+                <a href="https://www.opera.com/crypto/next" target="_blank" rel="noreferrer" className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-[10px] font-bold border border-red-500/30 flex items-center gap-1">
+                   Opera Crypto Wallet <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+            <div className="bg-black/30 p-4 rounded-lg border border-gray-700">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                2. Setup Account
+              </h3>
+              <ul className="text-xs text-gray-400 space-y-2 list-disc list-inside">
+                <li>Create a new wallet and <b>secure your seed phrase</b></li>
+                <li>Switch network to <b>Sepolia Test Network</b></li>
+                <li>Visit a <a href="https://sepoliafaucet.com/" target="_blank" rel="noreferrer" className="text-blue-400 underline">Sepolia Faucet</a> for free test ETH</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="bg-blue-600/10 p-4 rounded-lg border border-blue-400/20">
+            <h4 className="text-sm font-bold text-blue-300 mb-1">💡 Sandbox Mode is Active</h4>
+            <p className="text-xs text-blue-200/70">
+              Don't want to install a wallet? No problem. The IDE automatically uses an <b>In-Browser EVM</b>, allowing you to compile and test logic without any extensions!
+            </p>
+          </div>
+        </div>
+
         <div className="bg-orange-900/20 border border-orange-700/50 p-4 rounded-lg">
+
           <h3 className="text-orange-400 font-semibold mb-2 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             Important Tips
@@ -331,9 +462,48 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
           >
             🔗 Simulated Blockchain
           </button>
+          <button
+            onClick={() => setShowRightPanel('interact')}
+            disabled={!activeDeployment}
+            className={`px-4 py-2 text-sm rounded-lg font-medium transition flex items-center gap-2 ${
+              showRightPanel === 'interact' ? 'bg-green-600 text-white' : (!activeDeployment ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-700 text-gray-300 hover:bg-gray-600')
+            }`}
+          >
+            🕹️ Interact
+          </button>
         </div>
       </div>
+      
+      {showWalletBanner && !hasWallet && (
+        <div className="bg-indigo-600/10 border-b border-indigo-500/20 px-4 py-2 flex items-center justify-between animate-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-500/20 p-1.5 rounded-lg">
+              <ShieldCheck className="h-4 w-4 text-indigo-400" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-gray-200">Local Sandbox Mode Active</span>
+              <span className="text-[10px] text-gray-400">No Web3 wallet detected. You can still compile and simulate contracts locally.</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setActiveSection('docs')}
+              className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition underline decoration-indigo-500/30 underline-offset-2"
+            >
+              Learn how to install MetaMask
+            </button>
+            <button 
+              onClick={() => setShowWalletBanner(false)}
+              className="text-gray-500 hover:text-gray-300 transition"
+            >
+              <Check className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-hidden">
+
         {showRightPanel === 'editor' && (
           <SolidityEditor
             code={code}
@@ -348,7 +518,63 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
           />
         )}
         {showRightPanel === 'contracts' && <ContractFileBrowser />}
-        {showRightPanel === 'simulated' && <SimulatedChain deployments={simulations} />}
+        {showRightPanel === 'simulated' && (
+          <div className="h-full relative">
+            <SimulatedChain 
+              deployments={simulations} 
+              onReset={() => setShowResetConfirm(true)} 
+              onInteract={(deploy) => {
+                setActiveDeployment({
+                  address: deploy.contractAddress,
+                  abi: compileResult?.abi || [], // Fallback to current abi if possible
+                  network: deploy.network
+                });
+                setShowRightPanel('interact');
+              }}
+            />
+            
+            {showResetConfirm && (
+              <div className="absolute inset-0 z-50 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-gray-800 border border-red-500/30 rounded-lg shadow-2xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
+                  <div className="flex items-center gap-3 text-red-400 mb-4">
+                    <AlertTriangle className="h-6 w-6" />
+                    <h3 className="text-lg font-bold">Reset Blockchain History?</h3>
+                  </div>
+                  <p className="text-gray-300 text-sm mb-6 leading-relaxed">
+                    This will <span className="text-red-300 font-semibold underline">permanently delete</span> all deployment history for this project from the database. This action cannot be undone.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowResetConfirm(false)}
+                      className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded font-medium transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleResetChain}
+                      className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium shadow-lg shadow-red-900/20 transition"
+                    >
+                      Confirm Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {showRightPanel === 'interact' && activeDeployment && (
+          <div className="h-full p-4">
+             <ContractInteraction 
+               abi={activeDeployment.abi} 
+               address={activeDeployment.address} 
+               network={activeDeployment.network}
+               onRefreshSimulations={() => {
+                 // Trigger a slight refresh or re-fetch if needed
+                 console.log('Interaction triggered state change, UI updated.');
+               }}
+             />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -371,6 +597,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId }) => {
           }`}
         >
           Code Editor & Tools
+        </button>
+        <div className="flex-1"></div>
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium bg-red-900/40 text-red-300 border border-red-700/50 hover:bg-red-800/60 transition"
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
         </button>
       </div>
       <div className="flex-1 overflow-hidden">
