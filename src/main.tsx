@@ -9,8 +9,12 @@ if (typeof window !== 'undefined') {
   window.Buffer = Buffer;
 }
 
+import { Web3Provider } from './context/Web3Context';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Web3Provider>
+      <App />
+    </Web3Provider>
   </StrictMode>
 );

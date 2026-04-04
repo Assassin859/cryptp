@@ -1,3 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+  }
+
+  html, body {
+    @apply font-sans bg-gray-950 text-gray-300 antialiased;
+    font-size: 13px; /* High-density base scale */
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+
+  .font-sans {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  }
+
+  /* Global Scrollbar Overrides for VS Code visual style */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: transparent; /* Invisible by default */
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 5px;
+  }
+
+  /* Only show scrollbars on hover of the scrollable container */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.3s ease;
+  }
+
+  .custom-scrollbar:hover {
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  /* Webkit hover effect */
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover) !important;
+  }
+}
+
+/* Animations for VS Code feel */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation: fadeIn 0.3s ease forwards;
+}

@@ -274,10 +274,147 @@ contract CappedToken is ERC20 {
 `
 };
 
+export const erc721ATemplate: ContractTemplate = {
+  id: 'erc721a',
+  name: 'ERC-721A (Gas Efficient)',
+  description: 'Optimized NFT standard for massive batch minting',
+  code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "erc721a/contracts/ERC721A.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+/**
+ * @title MyNFTCollection
+ * @dev implementation of ERC721A for gas efficient minting
+ */
+contract MyNFTCollection is ERC721A, Ownable {
+    uint256 public constant MAX_SUPPLY = 10000;
+    uint256 public constant MINT_PRICE = 0.05 ether;
+
+    constructor() ERC721A("MyNFT", "MNFT") Ownable(msg.sender) {}
+
+    function mint(uint256 quantity) external payable {
+        // _nextTokenId() is handled by ERC721A
+        require(totalSupply() + quantity <= MAX_SUPPLY, "Reached max supply");
+        require(msg.value >= MINT_PRICE * quantity, "Need to send more ETH");
+        _safeMint(msg.sender, quantity);
+    }
+
+    function _startTokenId() internal view virtual override returns (uint256) {
+        return 1;
+    }
+}
+`
+};
+
+export const governanceToken: ContractTemplate = {
+  id: 'governance',
+  name: 'Governance Token (DAO)',
+  description: 'ERC-20 with Votes and Permit for DAO delegation',
+  code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
+
+contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes {
+    constructor() 
+        ERC20("GovToken", "GTK") 
+        ERC20Permit("GovToken") 
+    {
+        _mint(msg.sender, 1000000 * 10 ** decimals());
+    }
+
+    // Overrides required by Solidity
+    function _update(address from, address to, uint256 value)
+        internal
+        override(ERC20, ERC20Votes)
+    {
+        super._update(from, to, value);
+    }
+
+    function nonces(address owner)
+        public
+        view
+        override(ERC20Permit, Nonces)
+        returns (uint256)
+    {
+        return super.nonces(owner);
+    }
+}
+`
+};
+
+export const multiTokenTemplate: ContractTemplate = {
+  id: 'erc1155',
+  name: 'Multi-Token (Batch Minting)',
+  description: 'ERC-1155 for semi-fungible asset management',
+  code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract MultiAsset is ERC1155, Ownable {
+    uint256 public constant GOLD = 0;
+    uint256 public constant SILVER = 1;
+    uint256 public constant BRONZE = 2;
+
+    constructor() ERC1155("https://api.example.com/metadata/{id}.json") Ownable(msg.sender) {
+        _mint(msg.sender, GOLD, 1, "");
+        _mint(msg.sender, SILVER, 100, "");
+    }
+
+    function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
+        public
+        onlyOwner
+    {
+        _mintBatch(to, ids, amounts, data);
+    }
+}
+`
+};
+
+export const taxableToken: ContractTemplate = {
+  id: 'taxable',
+  name: 'Taxable Token (Experimental)',
+  description: 'ERC-20 with a logic-based transfer fee',
+  code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract TaxToken is ERC20, Ownable {
+    uint256 public taxRate = 5; // 5% tax
+
+    constructor() ERC20("TaxToken", "TAX") Ownable(msg.sender) {
+        _mint(msg.sender, 1000000 * 10 ** decimals());
+    }
+
+    function _update(address from, address to, uint256 value) internal override {
+        if (from != owner() && to != owner()) {
+            uint256 taxAmount = (value * taxRate) / 100;
+            super._update(from, owner(), taxAmount);
+            super._update(from, to, value - taxAmount);
+        } else {
+            super._update(from, to, value);
+        }
+    }
+}
+`
+};
+
 export const allTemplates: ContractTemplate[] = [
   basicERC20,
   burnableERC20,
   mintableERC20,
   pausableERC20,
-  cappedERC20
+  cappedERC20,
+  erc721ATemplate,
+  governanceToken,
+  multiTokenTemplate,
+  taxableToken
 ];

@@ -1,204 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Wallet, LogOut, ChevronDown } from 'lucide-react';
-import { BrowserProvider, ethers } from 'ethers';
-
-// Extend window interface for Web3
-interface EthereumProvider {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  on: (eventName: string, callback: (...args: unknown[]) => void) => void;
-  removeListener: (eventName: string, callback: (...args: unknown[]) => void) => void;
-  listAccounts(): Promise<string[]>;
-}
-
-declare global {
-  interface Window {
-    ethereum?: EthereumProvider;
-  }
-}
-
-interface WalletState {
-  address: string | null;
-  chainId: number | null;
-  balance: string | null;
-  network: string | null;
-  isConnected: boolean;
-}
-
-interface WalletError extends Error {
-  code?: number;
-}
+import { useWeb3 } from '../context/Web3Context';
 
 const WalletConnect: React.FC = () => {
-  const [wallet, setWallet] = useState<WalletState>({
-    address: null,
-    chainId: null,
-    balance: null,
-    network: null,
-    isConnected: false
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const { account, networkName, balance, isConnected, isConnecting, connect, disconnect, switchNetwork, chainId } = useWeb3();
   const [showNetworks, setShowNetworks] = useState(false);
 
   // Network names and chain IDs
   const NETWORKS: { [key: number]: string } = {
     1: 'Ethereum Mainnet',
-    5: 'Goerli Testnet',
     11155111: 'Sepolia Testnet',
-    80001: 'Mumbai Testnet',
-    137: 'Polygon'
+    8453: 'Base Mainnet',
+    137: 'Polygon',
+    42161: 'Arbitrum One'
   };
 
   const TESTNET_FAUCETS: { [key: number]: string } = {
-    5: 'https://goerlifaucet.com/',
     11155111: 'https://faucets.chain.link/sepolia',
     80001: 'https://faucet.polygon.technology/'
   };
 
-  // Check if wallet is already connected on load
-  useEffect(() => {
-    checkIfConnected();
-    if (window.ethereum) {
-      const handleChainChange = () => window.location.reload();
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChange);
-      return () => {
-        window.ethereum!.removeListener('accountsChanged', handleAccountsChanged);
-        window.ethereum!.removeListener('chainChanged', handleChainChange);
-      };
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleAccountsChanged = (accounts: string[]) => {
-    if (accounts.length > 0) {
-      connectWallet();
-    } else {
-      disconnectWallet();
-    }
-  };
-
-  const checkIfConnected = async () => {
-    if (!window.ethereum) return;
-    try {
-      const provider = new BrowserProvider(window.ethereum);
-      const accounts = await provider.listAccounts();
-      if (accounts.length > 0) {
-        await updateWalletInfo(provider);
-      }
-    } catch (error) {
-      console.error('Error checking wallet connection:', error);
-    }
-  };
-
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      alert('MetaMask is not installed. Please install it first.');
-      window.open('https://metamask.io/', '_blank');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const provider = new BrowserProvider(window.ethereum);
-      const accounts = await provider.send('eth_requestAccounts', []);
-      await updateWalletInfo(provider, accounts[0]);
-    } catch (error) {
-      console.error('Error connecting wallet:', error);
-      alert('Failed to connect wallet');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const updateWalletInfo = async (provider: BrowserProvider, addressOverride?: string) => {
-    try {
-      const signer = addressOverride 
-        ? await provider.getSigner(addressOverride)
-        : await provider.getSigner();
-      
-      const address = await signer.getAddress();
-      const network = await provider.getNetwork();
-      const balance = await provider.getBalance(address);
-      const balanceEth = ethers.formatEther(balance);
-
-      setWallet({
-        address,
-        chainId: Number(network.chainId),
-        balance: parseFloat(balanceEth).toFixed(4),
-        network: NETWORKS[Number(network.chainId)] || `Chain ${network.chainId}`,
-        isConnected: true
-      });
-    } catch (error) {
-      console.error('Error updating wallet info:', error);
-    }
-  };
-
-  const disconnectWallet = () => {
-    setWallet({
-      address: null,
-      chainId: null,
-      balance: null,
-      network: null,
-      isConnected: false
-    });
-  };
-
-  const switchNetwork = async (chainId: number) => {
-    if (!window.ethereum) return;
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chainId.toString(16)}` }]
-      });
-      setShowNetworks(false);
-    } catch (error: unknown) {
-      const walletError = error as WalletError;
-      if (walletError.code === 4902) {
-        alert(`Chain ${chainId} is not configured in MetaMask`);
-      } else {
-        console.error('Error switching network:', error);
-      }
-    }
+  const handleSwitchNetwork = async (targetChainId: number) => {
+    await switchNetwork(targetChainId);
+    setShowNetworks(false);
   };
 
   const openFaucet = () => {
-    if (wallet.chainId && TESTNET_FAUCETS[wallet.chainId]) {
-      window.open(TESTNET_FAUCETS[wallet.chainId], '_blank');
+    if (chainId && TESTNET_FAUCETS[chainId]) {
+      window.open(TESTNET_FAUCETS[chainId], '_blank');
     }
   };
 
   return (
     <div className="flex items-center gap-3">
-      {!wallet.isConnected ? (
+      {!isConnected ? (
         <button
-          onClick={connectWallet}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition"
+          onClick={connect}
+          disabled={isConnecting}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium text-sm transition"
         >
           <Wallet className="h-4 w-4" />
-          {isLoading ? 'Connecting...' : 'Connect Wallet'}
+          {isConnecting ? 'Connecting...' : 'Connect Wallet'}
         </button>
       ) : (
-        <div className="flex items-center gap-2 bg-gray-800 rounded-lg p-2 border border-gray-700">
+        <div className="flex items-center gap-2 bg-gray-800 rounded-lg p-1.5 border border-gray-700">
           {/* Network Selector */}
-          <div className="relative">
+          <div className="relative z-50">
             <button
               onClick={() => setShowNetworks(!showNetworks)}
-              className="flex items-center gap-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 rounded transition"
+              className="flex items-center gap-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 text-xs text-gray-300 rounded transition"
             >
               <div className="w-2 h-2 rounded-full bg-green-400"></div>
-              {wallet.network}
+              {networkName || 'Unknown Network'}
               <ChevronDown className="h-3 w-3" />
             </button>
 
             {showNetworks && (
-              <div className="absolute top-full mt-1 right-0 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50 min-w-48">
-                {Object.entries(NETWORKS).map(([chainId, name]) => (
+              <div className="absolute top-full mt-1 right-0 bg-gray-900 border border-gray-700 rounded-lg shadow-xl min-w-[200px] overflow-hidden">
+                {Object.entries(NETWORKS).map(([id, name]) => (
                   <button
-                    key={chainId}
-                    onClick={() => switchNetwork(Number(chainId))}
+                    key={id}
+                    onClick={() => handleSwitchNetwork(Number(id))}
                     className={`w-full text-left px-4 py-2 text-sm transition ${
-                      Number(chainId) === wallet.chainId
+                      Number(id) === chainId
                         ? 'bg-blue-600/20 text-blue-400 border-r-2 border-blue-400'
                         : 'text-gray-300 hover:bg-gray-800'
                     }`}
@@ -210,30 +74,30 @@ const WalletConnect: React.FC = () => {
             )}
           </div>
 
-          {/* Get Test ETH Button (for testnets) */}
-          {wallet.chainId && TESTNET_FAUCETS[wallet.chainId] && (
+          {/* Testnet Faucet */}
+          {chainId && TESTNET_FAUCETS[chainId] && (
             <button
               onClick={openFaucet}
-              className="text-xs px-2 py-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded transition"
-              title="Get free testnet ETH"
+              className="text-[10px] px-2 py-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded transition font-bold"
+              title="Get free testnet tokens"
             >
-              Get ETH
+              FAUCET
             </button>
           )}
 
           {/* Balance */}
-          <div className="text-sm font-medium text-gray-300 px-2">
-            {wallet.balance} ETH
+          <div className="text-xs font-medium text-gray-300 px-2 shrink-0">
+            {balance} ETH
           </div>
 
           {/* Address */}
-          <div className="text-sm text-gray-400 px-2 font-mono">
-            {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+          <div className="text-xs text-gray-400 px-2 font-mono shrink-0 border-l border-gray-600 pl-3">
+            {account?.slice(0, 6)}...{account?.slice(-4)}
           </div>
 
           {/* Disconnect */}
           <button
-            onClick={disconnectWallet}
+            onClick={disconnect}
             className="p-1 hover:bg-gray-700 text-gray-400 hover:text-red-400 rounded transition"
             title="Disconnect wallet"
           >

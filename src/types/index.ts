@@ -10,5 +10,6 @@ export interface SimulatedDeployment {
   timestamp: string;
   status: 'pending' | 'confirmed' | 'failed';
   isRealChain: boolean;
+  abi?: any[];
 }
 

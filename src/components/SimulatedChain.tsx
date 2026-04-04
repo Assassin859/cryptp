@@ -1,15 +1,38 @@
 import React, { useState } from 'react';
 import { SimulatedDeployment } from '../types';
-import { List, Clock11, MapPin, CheckCircle, Link, Hash, User, Zap, Trash2, Activity } from 'lucide-react';
+import { Clock11, MapPin, CheckCircle, Link, Hash, User, Zap, Trash2, Activity } from 'lucide-react';
 
 interface SimulatedChainProps {
   deployments: SimulatedDeployment[];
   onReset?: () => void;
   onInteract?: (deployment: SimulatedDeployment) => void;
+  onPromote?: (deployment: SimulatedDeployment) => void;
 }
 
-const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments, onReset, onInteract }) => {
-  console.log('SimulatedChain render:', { deploymentsCount: deployments.length, deployments });
+const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments, onReset, onInteract, onPromote }) => {
+  const [nodeStatus, setNodeStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+  
+  // Check node status on mount and periodic refresh
+  React.useEffect(() => {
+    const checkNode = async () => {
+      try {
+        const { browserVM } = await import('../utils/browserVM');
+        await browserVM.init();
+        // We'll peek at the internal state if we can, or just trust the init didn't throw a hard rejection
+        // Since we modified browserVM to be resilient, we need a way to know if it's in mock mode.
+        // For now, let's just do a simple check.
+        setNodeStatus((browserVM as any).isNodeOffline ? 'offline' : 'online');
+      } catch (e) {
+        setNodeStatus('offline');
+      }
+    };
+    
+    checkNode();
+    const interval = setInterval(checkNode, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, []);
+
+  console.log('SimulatedChain render:', { deploymentsCount: deployments.length, deployments, nodeStatus });
   const [hoveredBlock, setHoveredBlock] = useState<number | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
   const [tooltipCoords, setTooltipCoords] = useState<{ top: number; left: number } | null>(null);
@@ -53,6 +76,17 @@ const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments, onReset, o
         <div className="flex items-center gap-2">
           <Link className="h-4 w-4 text-blue-300" />
           <h3 className="text-sm font-semibold text-white">Blockchain Visualization</h3>
+          
+          {/* Status Badge */}
+          <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 bg-gray-900 rounded-full border border-gray-700">
+             <div className={`h-1.5 w-1.5 rounded-full ${
+               nodeStatus === 'online' ? 'bg-green-500 animate-pulse' : 
+               nodeStatus === 'offline' ? 'bg-orange-500' : 'bg-gray-500'
+             }`}></div>
+             <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+               {nodeStatus === 'online' ? 'Live Node' : nodeStatus === 'offline' ? 'Internal Simulation' : 'Checking...'}
+             </span>
+          </div>
         </div>
         {onReset && (
           <button
@@ -194,18 +228,40 @@ const SimulatedChain: React.FC<SimulatedChainProps> = ({ deployments, onReset, o
                             </span>
                           </div>
 
-                          {onInteract && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onInteract(deployment);
-                              }}
-                              className="mt-2 flex items-center justify-center gap-2 w-full py-1.5 bg-green-600/20 text-green-300 border border-green-500/40 rounded hover:bg-green-600/30 transition-all text-[10px] font-bold uppercase tracking-wider"
-                            >
-                              <Activity className="h-3 w-3" />
-                              Interact with Contract
-                            </button>
-                          )}
+                          <div className="flex flex-col gap-2 mt-2">
+                            {onInteract && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onInteract(deployment);
+                                }}
+                                className="flex items-center justify-center gap-2 w-full py-1.5 bg-green-600/20 text-green-300 border border-green-500/40 rounded hover:bg-green-600/30 transition-all text-[10px] font-bold uppercase tracking-wider"
+                              >
+                                <Activity className="h-3 w-3" />
+                                Interact with Contract
+                              </button>
+                            )}
+
+                            {onPromote && !deployment.isRealChain && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onPromote(deployment);
+                                }}
+                                className="flex items-center justify-center gap-2 w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/50 rounded transition-all text-[10px] font-bold uppercase tracking-wider relative overflow-hidden group"
+                              >
+                                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmer_1s_infinite]"></div>
+                                <Zap className="h-3 w-3" />
+                                Promote via MetaMask
+                              </button>
+                            )}
+                            {deployment.isRealChain && (
+                              <div className="flex items-center justify-center gap-2 w-full py-1.5 bg-purple-600/20 text-purple-300 border border-purple-500/40 rounded text-[10px] font-bold uppercase tracking-wider">
+                                <MapPin className="h-3 w-3" />
+                                Live on {deployment.network}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Arrow removed - now positioned to the right */}

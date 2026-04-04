@@ -1,5 +1,6 @@
 // Browser-compatible Solidity compilation using fallback approach
 // Note: Real compilation requires Node.js environment with Hardhat
+import * as parser from '@solidity-parser/parser';
 
 export interface CompilationError {
   type: 'error' | 'warning';
@@ -29,6 +30,7 @@ export interface CompilationResult {
   errors?: CompilationError[];
   abi?: unknown[];
   bytecode?: string;
+  sourceMap?: string;
   sourceCode?: string;
   code?: string;
   simulation?: DeploymentSimulation;
@@ -38,51 +40,53 @@ export interface CompilationResult {
   isHardcoded?: boolean; // Indicates if this is hardcoded bytecode
 }
 
-// Basic syntax validation for Solidity (works in browser)
+// Strict syntax validation for Solidity using the AST parser
 const validateSyntax = (sourceCode: string): CompilationError[] => {
   const errors: CompilationError[] = [];
 
-  // Check for basic syntax issues
-  if (!sourceCode.includes('pragma solidity')) {
-    errors.push({
-      type: 'error',
-      message: 'Missing pragma solidity directive'
+  try {
+    const ast = parser.parse(sourceCode);
+    
+    // Check if there is at least one contract-like definition
+    let hasContract = false;
+    parser.visit(ast, {
+      ContractDefinition: () => { hasContract = true; }
     });
+
+    if (!hasContract) {
+      errors.push({
+        type: 'error',
+        message: 'No contract, interface, or library definition found in the source code.'
+      });
+    }
+  } catch (err: any) {
+    if (err.errors) {
+       err.errors.forEach((e: any) => {
+          errors.push({
+            type: 'error',
+            message: e.message,
+            sourceLocation: e.loc ? {
+               file: 'contract.sol',
+               start: e.loc.start.line,
+               end: e.loc.end.line
+            } : undefined
+          });
+       });
+    } else {
+       errors.push({
+         type: 'error',
+         message: err.message || 'Syntax error in Solidity source'
+       });
+    }
   }
 
-  if (!sourceCode.includes('contract')) {
-    errors.push({
-      type: 'error',
-      message: 'No contract definition found'
-    });
+  // Fallback checks for common non-critical missing items
+  if (!sourceCode.includes('pragma solidity') && errors.length === 0) {
+    errors.push({ type: 'warning', message: 'Missing pragma solidity directive' });
   }
 
-  // Check for unmatched braces
-  const openBraces = (sourceCode.match(/{/g) || []).length;
-  const closeBraces = (sourceCode.match(/}/g) || []).length;
-  if (openBraces !== closeBraces) {
-    errors.push({
-      type: 'error',
-      message: `Unmatched braces: ${openBraces} opening, ${closeBraces} closing`
-    });
-  }
-
-  // Check for unmatched parentheses
-  const openParens = (sourceCode.match(/\(/g) || []).length;
-  const closeParens = (sourceCode.match(/\)/g) || []).length;
-  if (openParens !== closeParens) {
-    errors.push({
-      type: 'error',
-      message: `Unmatched parentheses: ${openParens} opening, ${closeParens} closing`
-    });
-  }
-
-  // Check for common mistakes
   if (!sourceCode.includes('SPDX-License-Identifier')) {
-    errors.push({
-      type: 'warning',
-      message: 'Missing SPDX license identifier (recommended)'
-    });
+    errors.push({ type: 'warning', message: 'Missing SPDX license identifier (recommended)' });
   }
 
   return errors;
@@ -114,252 +118,197 @@ const generateDeploymentSimulation = (gasEstimate: number = 1000000): Deployment
   };
 };
 
-// Mock ABI generation for demonstration (works in browser)
-const generateMockABI = (contractName: string = 'Contract'): unknown[] => {
-  return [
-    {
-      type: 'constructor',
-      inputs: [],
-      stateMutability: 'nonpayable'
-    },
-    {
-      type: 'function',
-      name: 'transfer',
-      inputs: [
-        { name: 'to', type: 'address' },
-        { name: 'amount', type: 'uint256' }
-      ],
-      outputs: [{ name: '', type: 'bool' }],
-      stateMutability: 'nonpayable'
-    },
-    {
-      type: 'function',
-      name: 'balanceOf',
-      inputs: [{ name: 'account', type: 'address' }],
-      outputs: [{ name: '', type: 'uint256' }],
-      stateMutability: 'view'
-    },
-    {
-      type: 'event',
-      name: 'Transfer',
-      inputs: [
-        { name: 'from', type: 'address', indexed: true },
-        { name: 'to', type: 'address', indexed: true },
-        { name: 'value', type: 'uint256', indexed: false }
-      ],
-      anonymous: false
-    }
-  ];
-};
-
-// Browser-compatible compilation with syntax validation
-const compileInBrowser = (sourceCode: string, contractName: string = 'Contract'): CompilationResult => {
+// Original Dynamic Mock ABI generation for browser-only mode (used as safety fallback)
+const generateMockABI = (sourceCode: string): unknown[] => {
+  const abi: any[] = [];
   try {
-    // Perform syntax validation
-    const errors = validateSyntax(sourceCode);
-
-    // Extract contract name from source code
-    const contractMatch = sourceCode.match(/contract\s+(\w+)/);
-    const actualContractName = contractMatch ? contractMatch[1] : contractName;
-
-    // If there are errors, return them
-    if (errors.some(e => e.type === 'error')) {
-      return {
-        success: false,
-        errors,
-        sourceCode,
-        code: sourceCode,
-        isMockResult: true
-      };
-    }
-
-    // Generate mock bytecode (simulating real compilation)
-    // Generate valid basic bytecode (minimal contract that returns 42)
-    // 602a60005260206000f3 (PUSH1 0x2a, PUSH1 0, MSTORE, PUSH1 32, PUSH1 0, RETURN)
-    const mockBytecode =
-      '0x6080604052348015600f57600080fd5b50602a60005260206000f3' +
-      Array(100)
-        .fill(0)
-        .map(() => Math.floor(Math.random() * 16).toString(16))
-        .join('');
-
-    // Estimate gas based on contract complexity
-    let gasEstimate = 21000; // Base deployment gas
-    const functionMatches = sourceCode.match(/function\s+\w+/g) || [];
-    gasEstimate += functionMatches.length * 1000;
-    const stateVarMatches = sourceCode.match(/\s+(uint|bool|address|string|bytes)\s+\w+.*?;/g) || [];
-    gasEstimate += stateVarMatches.length * 500;
-
-    const contractSize = mockBytecode.length / 2; // bytes
-
-    return {
-      success: true,
-      errors: errors.length > 0 ? errors : undefined,
-      abi: generateMockABI(actualContractName),
-      bytecode: mockBytecode,
-      sourceCode,
-      code: sourceCode,
-      simulation: generateDeploymentSimulation(gasEstimate),
-      contractSize,
-      gasEstimate,
-      isMockResult: true // Indicates this is validated but not truly compiled
-    };
-  } catch (error) {
-    return {
-      success: false,
-      errors: [
-        {
-          type: 'error',
-          message: error instanceof Error ? error.message : 'Unknown error during validation'
+    const ast = parser.parse(sourceCode);
+    parser.visit(ast, {
+      FunctionDefinition: (node) => {
+        if (node.isConstructor) {
+          abi.push({
+            type: 'constructor',
+            inputs: node.parameters.map(p => ({
+               name: p.name || '', 
+               type: (p.typeName as any)?.name || 'uint256' 
+            })),
+            stateMutability: node.stateMutability || 'nonpayable'
+          });
+        } else if (node.name) {
+          abi.push({
+            type: 'function',
+            name: node.name,
+            inputs: node.parameters.map(p => ({
+               name: p.name || '', 
+               type: (p.typeName as any)?.name || 'uint256'
+            })),
+            outputs: node.returnParameters ? node.returnParameters.map(p => ({
+               name: p.name || '',
+               type: (p.typeName as any)?.name || 'uint256'
+            })) : [],
+            stateMutability: node.stateMutability || 'nonpayable'
+          });
         }
-      ],
-      sourceCode,
-      code: sourceCode,
-      isMockResult: true
-    };
+      },
+      EventDefinition: (node) => {
+        abi.push({
+          type: 'event',
+          name: node.name,
+          inputs: node.parameters.map(p => ({
+            name: p.name || '',
+            type: (p.typeName as any)?.name || 'uint256',
+            indexed: !!p.isIndexed
+          })),
+          anonymous: false
+        });
+      }
+    });
+  } catch (e) {
+    return [{ type: 'function', name: 'error', inputs: [], outputs: [{type: 'string'}], stateMutability: 'view' }];
   }
+  return abi;
 };
 
-// Try to use real solc if available, fallback to browser-compatible validation
-const compileWithRealSolc = async (sourceCode: string, contractName: string = 'Contract'): Promise<CompilationResult> => {
-  try {
-    // Check if we're in a Node.js environment with solc available
-    if (typeof window === 'undefined') {
-      // We're in Node.js, try to use real solc
-      const solc = await import('solc');
+// Browser-native compilation using Solc-WASM in a WebWorker
+const worker = typeof window !== 'undefined' ? new Worker(new URL('./compiler.worker.ts', import.meta.url), {
+  type: 'module'
+}) : null;
 
-      const input = {
-        language: 'Solidity',
-        sources: {
-          'contract.sol': {
-            content: sourceCode
-          }
-        },
-        settings: {
-          outputSelection: {
-            '*': {
-              '*': ['*']
-            }
-          },
-          optimizer: {
-            enabled: false, // Completely disable optimizer
-            runs: 200
-          },
-          evmVersion: 'byzantium' // Use Byzantium EVM version (very old, maximum compatibility)
-        }
-      };
+const compileInWorker = async (sourceCode: string, contractName: string = 'Contract', projectFiles?: { name: string, content: string }[]): Promise<CompilationResult> => {
+  if (!worker) return compileInBrowser(sourceCode);
 
-      // Try to use a specific older solc version if available
-      let solcInstance = solc;
-      if (solc.version && solc.version() !== '0.8.28') {
-        // If we have a different version, try to use it
-        console.log('Using solc version:', solc.version());
-      }
-
-      const output = JSON.parse(solc.compile(JSON.stringify(input)));
-
-      if (output.errors) {
-        const errors: CompilationError[] = output.errors.map((error: any) => ({
-          type: error.severity as 'error' | 'warning',
-          message: error.message,
-          sourceLocation: error.sourceLocation ? {
-            file: error.sourceLocation.file,
-            start: error.sourceLocation.start,
-            end: error.sourceLocation.end
-          } : undefined
-        }));
-
-        if (errors.some(e => e.type === 'error')) {
-          return {
-            success: false,
-            errors,
-            sourceCode,
-            code: sourceCode
-          };
-        }
-      }
-
-      const contract = output.contracts?.['contract.sol']?.[contractName];
-      if (!contract) {
-        return {
+  return new Promise((resolve) => {
+    const handler = (event: MessageEvent) => {
+      const { success, errors, abi, bytecode, sourceMap } = event.data;
+      worker.removeEventListener('message', handler);
+      
+      if (success) {
+        const contractSize = bytecode ? bytecode.length / 2 : 0;
+        const gasEstimate = Math.max(21000, contractSize * 200);
+        
+        resolve({
+          success: true,
+          errors: errors,
+          abi,
+          bytecode: bytecode.startsWith('0x') ? bytecode : '0x' + bytecode,
+          sourceMap,
+          sourceCode,
+          code: sourceCode,
+          simulation: generateDeploymentSimulation(gasEstimate),
+          contractSize,
+          gasEstimate
+        });
+      } else {
+        resolve({
           success: false,
-          errors: [{
-            type: 'error',
-            message: `Contract "${contractName}" not found in compilation output`
-          }],
+          errors,
           sourceCode,
           code: sourceCode
-        };
+        });
       }
+    };
+    
+    worker.addEventListener('message', handler);
+    worker.postMessage({ sourceCode, contractName, projectFiles });
+  });
+};
 
-      const bytecode = contract.evm?.bytecode?.object || '';
-      const contractSize = bytecode ? bytecode.length / 2 : 0;
-      const gasEstimate = Math.max(21000, contractSize * 200);
+const compileInBrowser = (sourceCode: string): CompilationResult => {
+  const errors = validateSyntax(sourceCode);
+  if (errors.some(e => e.type === 'error')) {
+    return { success: false, errors, sourceCode, code: sourceCode, isMockResult: true };
+  }
 
-      return {
-        success: true,
-        errors: output.errors ? output.errors.map((error: any) => ({
-          type: error.severity as 'error' | 'warning',
-          message: error.message,
-          sourceLocation: error.sourceLocation ? {
-            file: error.sourceLocation.file,
-            start: error.sourceLocation.start,
-            end: error.sourceLocation.end
-          } : undefined
-        })) : undefined,
-        abi: contract.abi,
-        bytecode: bytecode ? '0x' + bytecode : undefined,
-        sourceCode,
-        code: sourceCode,
-        simulation: generateDeploymentSimulation(gasEstimate),
-        contractSize,
-        gasEstimate
-      };
-    } else {
-      // We're in browser, use validation-only approach
-      return compileInBrowser(sourceCode, contractName);
+  const mockBytecode = '0x6080604052348015600f57600080fd5b50602a60005260206000f3' + randomHex(100);
+  const contractSize = mockBytecode.length / 2;
+  const gasEstimate = 100000;
+
+  return {
+    success: true,
+    abi: generateMockABI(sourceCode),
+    bytecode: mockBytecode,
+    sourceCode,
+    code: sourceCode,
+    simulation: generateDeploymentSimulation(gasEstimate),
+    contractSize,
+    gasEstimate,
+    isMockResult: true
+  };
+};
+
+const compileWithRealSolc = async (sourceCode: string, contractName: string = 'Contract', projectFiles?: { name: string, content: string }[]): Promise<CompilationResult> => {
+  try {
+    if (typeof window !== 'undefined') {
+       return await compileInWorker(sourceCode, contractName, projectFiles);
     }
+
+    // Node.js environment
+    const solc = await import('solc');
+    let sources: any = { 'contract.sol': { content: sourceCode } };
+    if (projectFiles) {
+      projectFiles.forEach(f => { sources[f.name] = { content: f.content }; });
+    }
+
+    const input = {
+      language: 'Solidity',
+      sources: sources,
+      settings: {
+        outputSelection: { '*': { '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode.sourceMap'] } },
+        optimizer: { enabled: true, runs: 200 }
+      }
+    };
+
+    const output = JSON.parse(solc.compile(JSON.stringify(input)));
+
+    if (output.errors) {
+      const errors = output.errors.map((error: any) => ({
+        type: error.severity,
+        message: error.message,
+        sourceLocation: error.sourceLocation
+      }));
+
+      if (errors.some((e: any) => e.type === 'error')) {
+        return { success: false, errors, sourceCode, code: sourceCode };
+      }
+    }
+
+    const contract = output.contracts['contract.sol']?.[contractName] || Object.values(output.contracts['contract.sol'] || {})[0];
+    const bytecode = (contract as any).evm.bytecode.object;
+
+    return {
+      success: true,
+      abi: (contract as any).abi,
+      bytecode: '0x' + bytecode,
+      sourceMap: (contract as any).evm.deployedBytecode.sourceMap,
+      simulation: generateDeploymentSimulation(bytecode.length / 2 * 200),
+      contractSize: bytecode.length / 2,
+      gasEstimate: bytecode.length / 2 * 200
+    };
   } catch (error) {
-    // Fallback to browser-compatible validation
-    console.warn('Real compilation failed, using syntax validation:', error);
-    return compileInBrowser(sourceCode, contractName);
+    return compileInBrowser(sourceCode);
   }
 };
 
-export const compile = async (sourceCode: string, hardcodedBytecode?: string): Promise<CompilationResult> => {
-  // If hardcoded bytecode is provided, use it instead of compiling
+export const compile = async (sourceCode: string, hardcodedBytecode?: string, projectFiles?: { name: string, content: string }[]): Promise<CompilationResult> => {
   if (hardcodedBytecode) {
-    console.log('Using hardcoded bytecode for deployment, length:', hardcodedBytecode.length);
-    console.log('Hardcoded bytecode starts with:', hardcodedBytecode.substring(0, 50));
     return {
       success: true,
-      abi: [
-        {
-          type: 'function',
-          name: 'getValue',
-          inputs: [],
-          outputs: [{ name: '', type: 'uint256' }],
-          stateMutability: 'view'
-        }
-      ], // Simple ABI for constant return contract
+      abi: [{ type: 'function', name: 'getValue', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' }],
       bytecode: hardcodedBytecode,
       sourceCode,
       code: sourceCode,
       simulation: generateDeploymentSimulation(100000),
       contractSize: hardcodedBytecode.length / 2,
       gasEstimate: 100000,
-      isHardcoded: true // Flag to indicate hardcoded bytecode
+      isHardcoded: true
     };
   }
 
-  // Extract contract name from source code
-  const contractMatch = sourceCode.match(/contract\s+(\w+)/);
+  const contractMatch = sourceCode.match(/(?:^|\s)contract\s+([a-zA-Z0-9_]+)\s*(?:is\s+[^{]+)?\{/);
   const contractName = contractMatch ? contractMatch[1] : 'Contract';
-
-  return compileWithRealSolc(sourceCode, contractName);
+  return compileWithRealSolc(sourceCode, contractName, projectFiles);
 };
 
-export const compileWithHardhat = async (sourceCode: string, hardcodedBytecode?: string): Promise<CompilationResult> => {
-  // For browser compatibility, use the same compilation function
-  return compile(sourceCode, hardcodedBytecode);
+export const compileWithHardhat = async (sourceCode: string, hardcodedBytecode?: string, projectFiles?: { name: string, content: string }[]): Promise<CompilationResult> => {
+  return compile(sourceCode, hardcodedBytecode, projectFiles);
 };

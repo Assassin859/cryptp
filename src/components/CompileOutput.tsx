@@ -1,10 +1,20 @@
 import React, { useState } from 'react';
 import { CompilationResult } from '../utils/hardhatCompiler';
-import { ethers, ContractFactory, getCreateAddress } from 'ethers';
+import { ethers, ContractFactory } from 'ethers';
 import { SimulatedDeployment } from '../types';
-import { AlertTriangle, CheckCircle, Copy, ChevronDown, ChevronUp, Zap, Rocket, Loader, FileCode, Database, DollarSign } from 'lucide-react';
-
-
+import { 
+  AlertTriangle, 
+  CheckCircle, 
+  Copy, 
+  ChevronDown, 
+  ChevronUp, 
+  Rocket, 
+  Loader, 
+  FileCode, 
+  Database, 
+  Wallet 
+} from 'lucide-react';
+import { useWeb3 } from '../context/Web3Context';
 
 interface CompileOutputProps {
   result: CompilationResult;
@@ -13,10 +23,12 @@ interface CompileOutputProps {
 }
 
 const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) => {
+  const { account, networkName, isConnected, connect } = useWeb3();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview']));
   const [isDeploying, setIsDeploying] = useState(false);
   const [deploymentResult, setDeploymentResult] = useState<SimulatedDeployment | null>(null);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
+  const [executionEnv, setExecutionEnv] = useState<'sandbox' | 'injected'>('sandbox');
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -32,9 +44,8 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
     navigator.clipboard.writeText(text);
   };
 
-  // Check if MetaMask is available
   const isMetaMaskAvailable = () => {
-    return typeof window !== 'undefined' && window.ethereum;
+    return typeof window !== 'undefined' && (window as any).ethereum;
   };
 
   const deployWithMetaMask = async () => {
@@ -43,10 +54,8 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
       return;
     }
 
-    // Check if MetaMask is available
     if (!isMetaMaskAvailable()) {
-      setDeploymentError('MetaMask not detected. Please install MetaMask browser extension. Falling back to local simulation.');
-      await deployLocalSimulation();
+      setDeploymentError('MetaMask not detected.');
       return;
     }
 
@@ -55,155 +64,33 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
     setDeploymentResult(null);
 
     try {
-      // Request account access - this should trigger MetaMask popup
-      console.log('Requesting MetaMask account access...');
-      if (!window.ethereum) throw new Error('MetaMask not found');
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      console.log('MetaMask account access granted');
-      
-      // Use ethers v6 BrowserProvider
-      const provider = new ethers.BrowserProvider(window.ethereum as any);
-      const network = await provider.getNetwork();
-
-      const requiredChainId = BigInt(11155111); // Sepolia
-      if (network.chainId !== requiredChainId) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0xaa36a7' }]
-          });
-        } catch (switchError: any) {
-          if (switchError.code === 4902) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [
-                {
-                  chainId: '0xaa36a7',
-                  chainName: 'Sepolia Test Network',
-                  nativeCurrency: { name: 'Sepolia ETH', symbol: 'SEP', decimals: 18 },
-                  rpcUrls: ['https://rpc.sepolia.org'],
-                  blockExplorerUrls: ['https://sepolia.etherscan.io']
-                }
-              ]
-            });
-          } else {
-            throw new Error('Please switch MetaMask to Sepolia testnet.');
-          }
-        }
-      }
-
-
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       
-      // Try the standard ContractFactory approach first (skip if hardcoded bytecode)
-      let contractAddress = '';
-      let receipt: any;
-
+      const factory = new ContractFactory(result.abi as any, result.bytecode as string, signer);
+      const deployment = await factory.deploy();
+      const contract = await deployment.waitForDeployment();
+      const contractAddress = await contract.getAddress();
       
-      if (!result.isHardcoded) {
-        try {
-          console.log('Attempting standard ContractFactory deployment...');
-          const factory = new ContractFactory(result.abi as any, result.bytecode as string, signer);
-          const deployment = await factory.deploy();
-          const contract = await deployment.waitForDeployment();
-          contractAddress = await contract.getAddress();
-          
-          // Get transaction receipt
-          const deployTx = deployment.deploymentTransaction();
-          if (deployTx && deployTx.hash) {
-            receipt = await provider.waitForTransaction(deployTx.hash);
-          } else {
-            throw new Error('No transaction hash available');
-          }
-          console.log('Standard deployment successful');
+      const deployTx = deployment.deploymentTransaction();
+      const receipt = deployTx ? await provider.waitForTransaction(deployTx.hash) : null;
 
-        } catch (factoryError: any) {
-          console.warn('Standard deployment failed, trying manual transaction approach:', factoryError.message);
-          // Continue to manual deployment
-        }
-      }
-      
-      // Manual transaction deployment (always used for hardcoded bytecode)
-      let finalContractAddress = contractAddress;
-      if (!finalContractAddress) {
-
-        console.log('Attempting manual transaction deployment...');
-        
-        // Create transaction data for deployment
-        const deployData = result.bytecode;
-        console.log('Deploy data length:', deployData?.length);
-        
-        // Estimate gas with a simple call first
-        let gasLimit;
-        try {
-          gasLimit = await provider.estimateGas({
-            data: deployData,
-            from: await signer.getAddress()
-          });
-          console.log('Estimated gas:', gasLimit.toString());
-          // Add some buffer
-          gasLimit = gasLimit * BigInt(120) / BigInt(100);
-        } catch (gasError) {
-          console.warn('Gas estimation failed, using default:', gasError);
-          // Use a very conservative gas limit for simple contracts
-          gasLimit = BigInt(100000); // Much lower default gas limit
-        }
-        
-        // Send the deployment transaction
-        console.log('Sending deployment transaction...');
-        console.log('Transaction data length:', deployData?.length);
-        console.log('Gas limit:', gasLimit.toString());
-        
-        const txRequest = {
-          data: deployData,
-          gasLimit: gasLimit
-        };
-        console.log('Transaction request:', txRequest);
-        
-        const txResponse = await signer.sendTransaction(txRequest);
-        console.log('Deployment transaction sent:', txResponse.hash);
-        
-        // Wait for the transaction to be mined
-        receipt = await txResponse.wait();
-        console.log('Transaction mined, getting contract address...');
-        
-        // Calculate contract address
-        const deployerAddress = await signer.getAddress();
-        const nonce = await provider.getTransactionCount(deployerAddress, 'latest');
-        const calculatedAddress = getCreateAddress({
-          from: deployerAddress,
-          nonce: nonce - 1 // -1 because nonce was already incremented
-        });
-        
-        console.log('Manual deployment successful');
-        finalContractAddress = calculatedAddress;
-      }
-
-
-      const deployer = await signer.getAddress();
       const deploymentEntry: SimulatedDeployment = {
-        contractAddress: finalContractAddress,
-
-        transactionHash: receipt.hash,
-        network: 'Sepolia',
-        blockNumber: receipt.blockNumber,
-        gasUsed: Number(receipt.gasUsed),
-        deployer,
+        contractAddress,
+        transactionHash: receipt?.hash || '',
+        network: networkName || 'Injected Network',
+        blockNumber: receipt?.blockNumber || 0,
+        gasUsed: receipt ? Number(receipt.gasUsed) : 0,
+        deployer: account || '',
         timestamp: new Date().toISOString(),
-        status: receipt.status === 1 ? 'confirmed' : 'failed',
+        status: 'confirmed',
         isRealChain: true
       };
 
       setDeploymentResult(deploymentEntry);
       onDeployment?.(deploymentEntry);
-      console.log('Deployment successful, calling onDeployment:', deploymentEntry);
     } catch (error: any) {
-      const message = error?.message || 'Deployment failed';
-      setDeploymentError(message);
-
-      // Always try local simulation as fallback
-      console.log('MetaMask deployment failed, falling back to local simulation');
-      await deployLocalSimulation();
+      setDeploymentError(error?.message || 'Deployment failed');
     } finally {
       setIsDeploying(false);
     }
@@ -217,7 +104,6 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
     setDeploymentResult(null);
 
     try {
-      console.log('Deploying to In-Browser EVM...');
       const { browserVM } = await import('../utils/browserVM');
       const deployResult = await browserVM.deployContract(result.bytecode);
       const blockNumber = await browserVM.getBlockNumber();
@@ -236,7 +122,6 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
 
       setDeploymentResult(simulated);
       onDeployment?.(simulated);
-      console.log('Local simulation successful, calling onDeployment:', simulated);
     } catch (error: any) {
       setDeploymentError(error?.message || 'Local simulation failed');
     } finally {
@@ -244,310 +129,164 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
     }
   };
 
-  const onDeployClick = async () => {
-    await deployWithMetaMask();
-  };
-
-  const onDeployLocalClick = async () => {
-    await deployLocalSimulation();
-  };
-
-
   if (!result.success) {
-    // Show errors for failed compilation
     return (
-      <div className="h-full flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="bg-gray-800 border-b border-gray-700 p-3 flex items-center justify-between">
+      <div className="h-full flex flex-col overflow-hidden bg-[#1e1e1e]">
+        <div className="bg-[#252526] border-b border-[#2d2d2d] p-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-red-500" />
-            <span className="font-medium text-red-400">Compilation Failed</span>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">Compilation Failed</span>
           </div>
         </div>
-
-        {/* Errors */}
-        <div className="flex-1 overflow-y-auto text-sm p-3">
-          {result.errors && result.errors.length > 0 && (
-            <div className="space-y-2">
-              {result.errors.map((error, idx) => (
-                <div
-                  key={idx}
-                  className={`p-3 rounded text-xs font-mono ${
-                    error.type === 'error'
-                      ? 'bg-red-900/20 text-red-300 border border-red-700/50'
-                      : 'bg-yellow-900/20 text-yellow-300 border border-yellow-700/50'
-                  }`}
-                >
-                  <div className="font-bold mb-1">
-                    {error.type === 'error' ? '❌' : '⚠️'} {error.type.toUpperCase()}
-                  </div>
-                  <div>{error.message}</div>
-                  {error.sourceLocation && (
-                    <div className="mt-1 text-gray-400">
-                      Line {error.sourceLocation.start}-{error.sourceLocation.end} in {error.sourceLocation.file}
-                    </div>
-                  )}
-                </div>
-              ))}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {result.errors?.map((error: any, idx: number) => (
+            <div key={idx} className="p-3 rounded bg-red-900/10 border border-red-700/30 text-[11px] font-mono text-red-300">
+              {error.message}
             </div>
-          )}
+          ))}
         </div>
       </div>
     );
   }
 
-  // Show deployment-ready information for successful compilation
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-3 flex items-center justify-between">
+    <div className="h-full flex flex-col overflow-hidden bg-[#1e1e1e]">
+      <div className="bg-[#252526] border-b border-[#2d2d2d] p-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Rocket className="h-5 w-5 text-green-500" />
-          <span className="font-medium text-green-400">Contract Ready for Deployment</span>
-          {result.isMockResult && (
-            <span className="text-xs bg-yellow-900/30 text-yellow-300 px-2 py-1 rounded">
-              Syntax Validated
-            </span>
-          )}
+          <Rocket className="h-4 w-4 text-green-500" />
+          <span className="text-[11px] font-bold uppercase tracking-wider text-green-400">Contract Ready</span>
         </div>
       </div>
 
-      {/* Deployment Information */}
-      <div className="flex-1 overflow-y-auto text-sm">
-        {/* Contract Overview */}
-        <div className="border-b border-gray-700">
-          <button
-            onClick={() => toggleSection('overview')}
-            className="w-full px-3 py-3 bg-gray-800 hover:bg-gray-750 text-gray-300 flex items-center justify-between hover:text-white transition"
-          >
-            <span className="font-medium flex items-center gap-2">
-              <FileCode className="h-4 w-4 text-blue-400" />
-              Contract Overview
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {/* Overview */}
+        <div className="border-b border-[#2d2d2d]">
+          <button onClick={() => toggleSection('overview')} className="w-full px-4 py-3 bg-[#252526]/30 hover:bg-[#2d2d2d] text-[#cccccc] flex items-center justify-between transition-colors">
+            <span className="text-[11px] font-bold uppercase tracking-widest flex items-center gap-2">
+              <FileCode className="h-3.5 w-3.5 text-blue-400" /> Contract Info
             </span>
-            {expandedSections.has('overview') ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
+            {expandedSections.has('overview') ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
+          
           {expandedSections.has('overview') && (
-            <div className="p-3 bg-gray-900/50 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-black/30 p-3 rounded">
-                  <div className="text-xs text-gray-500 mb-1">Contract Size</div>
-                  <div className="text-sm font-mono text-green-300">
-                    {result.contractSize ? `${result.contractSize} bytes` : 'N/A'}
-                  </div>
-                  {result.contractSize && result.contractSize > 24576 && (
-                    <div className="text-xs text-red-400 mt-1">⚠️ Exceeds 24KB limit</div>
-                  )}
-                </div>
-                <div className="bg-black/30 p-3 rounded">
-                  <div className="text-xs text-gray-500 mb-1">Functions</div>
-                  <div className="text-sm font-mono text-blue-300">
-                    {result.abi?.filter((item: any) => item.type === 'function').length || 0} functions
-                  </div>
-
-                </div>
+            <div className="p-4 grid grid-cols-2 gap-3 bg-[#1a1a1a]">
+              <div className="bg-[#252526] p-3 rounded border border-[#333]">
+                <div className="text-[9px] uppercase font-black text-gray-500 mb-1">Contract Size</div>
+                <div className="text-xs font-mono text-green-400">{result.contractSize || '0'} bytes</div>
               </div>
-              <div className="grid grid-cols-1 gap-3">
-                <div className="bg-black/30 p-3 rounded">
-                  <div className="text-xs text-gray-500 mb-1">Estimated Deployment Cost</div>
-                  <div className="text-sm font-mono text-purple-300 flex items-center gap-2">
-                    <DollarSign className="h-3 w-3" />
-                    ~{result.gasEstimate ? (result.gasEstimate * 0.00000002).toFixed(4) : 'N/A'} ETH
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    @ 20 Gwei gas price
-                  </div>
-                </div>
+              <div className="bg-[#252526] p-3 rounded border border-[#333]">
+                <div className="text-[9px] uppercase font-black text-gray-500 mb-1">Functions</div>
+                <div className="text-xs font-mono text-blue-400">{result.abi?.filter((i: any) => i.type === 'function').length || 0}</div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Deployment Actions */}
-        <div className="border-b border-gray-700">
-          <div className="p-3 bg-gray-900/50">
-            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-              <Rocket className="h-4 w-4 text-blue-400" />
-              Deployment Actions
-            </h3>
+        {/* Deployment Section */}
+        <div className="p-4 space-y-4">
+          <div className="space-y-4">
+            <div>
+              <label className="text-[10px] uppercase font-black text-gray-500 mb-1.5 block tracking-widest">Execution Environment</label>
+              <div className="relative group">
+                <select 
+                  value={executionEnv}
+                  onChange={(e) => setExecutionEnv(e.target.value as any)}
+                  className="w-full bg-[#252526] border border-[#333] hover:border-[#007acc] text-[11px] font-bold text-[#cccccc] px-3 py-2.5 rounded appearance-none transition-all cursor-pointer outline-none shadow-inner"
+                >
+                  <option value="sandbox">CryptP Sandbox (Browser VM)</option>
+                  <option value="injected">Injected Provider (MetaMask)</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-3 text-gray-500 pointer-events-none" />
+              </div>
+            </div>
 
+            {/* Actions */}
             {!deploymentResult && !deploymentError && (
-              <div className="space-y-3">
-                <div className="flex flex-col gap-2">
+              <div className="space-y-3 pt-2">
+                {executionEnv === 'injected' && !isConnected ? (
                   <button
-                    onClick={onDeployLocalClick}
-                    disabled={isDeploying}
-                    className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white rounded flex flex-col items-center justify-center transition shadow-lg shadow-indigo-900/20 group"
+                    onClick={connect}
+                    className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
                   >
-                    <div className="flex items-center gap-2 font-bold">
-                       {isDeploying ? <Loader className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 text-yellow-400 group-hover:scale-110 transition" />}
-                       Deploy to Local Sandbox
-                    </div>
-                    <span className="text-[10px] text-indigo-200 opacity-70">Zero-Install • Instant Execution</span>
+                    <Wallet className="size-4" /> Connect Wallet to Deploy
                   </button>
-
-                  <div className="relative py-2">
-                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-800"></span></div>
-                    <div className="relative flex justify-center text-[10px] uppercase font-bold text-gray-600"><span className="bg-gray-950 px-2">OR</span></div>
-                  </div>
-
+                ) : (
                   <button
-                    onClick={onDeployClick}
-                    disabled={isDeploying || !isMetaMaskAvailable()}
-                    className={`w-full px-4 py-2 rounded flex items-center justify-center gap-2 transition border ${
-                      isMetaMaskAvailable() 
-                        ? 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20' 
-                        : 'bg-gray-900/50 border-gray-800 text-gray-600 cursor-not-allowed'
+                    onClick={executionEnv === 'sandbox' ? deployLocalSimulation : deployWithMetaMask}
+                    disabled={isDeploying}
+                    className={`w-full px-4 py-3 rounded font-bold text-xs flex flex-col items-center justify-center transition-all shadow-lg active:scale-95 group ${
+                      executionEnv === 'sandbox' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-[#007acc] hover:bg-[#0062a3]'
                     }`}
                   >
-                    <Rocket className="h-4 w-4" />
-                    <span className="text-xs font-semibold">Deploy to Sepolia (Testnet)</span>
-                  </button>
-                </div>
-
-                {!isMetaMaskAvailable() && (
-                  <div className="bg-orange-900/10 border border-orange-900/30 p-2 rounded flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5" />
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-orange-300 font-bold">MetaMask Not Found</span>
-                      <span className="text-[9px] text-gray-500">Testnet deployment requires an extension. 
-                        <a href="https://metamask.io/download/" target="_blank" rel="noreferrer" className="text-orange-400 underline ml-1">Install MetaMask</a>
-                      </span>
+                    <div className="flex items-center gap-2">
+                      {isDeploying ? <Loader className="size-4 animate-spin text-white" /> : <Rocket className="size-4 text-white group-hover:scale-110 transition-transform" />}
+                      <span>{executionEnv === 'sandbox' ? 'Deploy to Sandbox' : `Deploy to ${networkName || 'Network'}`}</span>
                     </div>
-                  </div>
+                    <span className="text-[9px] opacity-60 font-medium mt-0.5">
+                      {executionEnv === 'sandbox' ? 'Instant • No Gas Required' : `Account: ${account?.slice(0, 10)}...`}
+                    </span>
+                  </button>
                 )}
               </div>
-
             )}
 
-            {deploymentResult && (
-              <div className="space-y-3">
-                <div className="p-3 bg-green-900/20 border border-green-700 rounded">
-                  <div className="flex items-center gap-2 text-green-400 mb-2">
-                    <CheckCircle className="h-4 w-4" />
-                    <span className="font-medium">Deployment Successful!</span>
-                  </div>
-                  <div className="space-y-2 text-xs text-gray-300">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Contract Address:</span>
-                      <span className="text-green-300 font-mono">{deploymentResult.contractAddress}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Transaction Hash:</span>
-                      <span className="text-blue-300 font-mono">{deploymentResult.transactionHash}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Block Number:</span>
-                      <span>{deploymentResult.blockNumber}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Gas Used:</span>
-                      <span>{deploymentResult.gasUsed.toLocaleString()}</span>
-                    </div>
-                  </div>
+            {/* Error Message */}
+            {deploymentError && (
+              <div className="p-3 bg-red-900/20 border border-red-700/30 rounded">
+                <div className="flex items-center gap-2 text-red-400 mb-1">
+                  <AlertTriangle className="size-3.5" />
+                  <span className="text-[10px] font-bold uppercase">Deployment Failed</span>
                 </div>
-                <div className="text-xs text-gray-400 bg-black/20 p-2 rounded">
-                  ✅ Contract deployed successfully! You can now interact with it at the address above.
-                </div>
+                <div className="text-[11px] text-red-300 font-mono mb-2 break-words">{deploymentError}</div>
+                <button onClick={() => setDeploymentError(null)} className="text-[10px] px-2 py-1 bg-red-800 hover:bg-red-700 text-white rounded">Dismiss</button>
               </div>
             )}
 
-            {deploymentError && (
-              <div className="p-3 bg-red-900/20 border border-red-700 rounded">
-                <div className="flex items-center gap-2 text-red-400 mb-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span className="font-medium">Deployment Failed</span>
+            {/* Success Message */}
+            {deploymentResult && (
+              <div className="p-4 bg-green-900/10 border border-green-700/30 rounded space-y-3">
+                <div className="flex items-center gap-2 text-green-500 mb-1">
+                  <CheckCircle className="size-4" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider">Deployment Successful</span>
                 </div>
-                <div className="text-xs text-red-300">{deploymentError}</div>
-                <button
-                  onClick={() => setDeploymentError(null)}
-                  className="mt-2 text-xs px-2 py-1 bg-red-800 hover:bg-red-700 text-red-200 rounded"
-                >
-                  Try Again
-                </button>
+                <div className="space-y-2">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] uppercase font-black text-gray-500">Contract Address</span>
+                    <span className="text-[10px] font-mono text-green-400 break-all">{deploymentResult.contractAddress}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] uppercase font-black text-gray-500">Transaction Hash</span>
+                    <span className="text-[10px] font-mono text-blue-400 break-all">{deploymentResult.transactionHash}</span>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Contract Details */}
-        <div className="border-b border-gray-700">
-          <button
-            onClick={() => toggleSection('details')}
-            className="w-full px-3 py-3 bg-gray-800 hover:bg-gray-750 text-gray-300 flex items-center justify-between hover:text-white transition"
-          >
-            <span className="font-medium flex items-center gap-2">
-              <Database className="h-4 w-4 text-purple-400" />
-              Contract Details
+        {/* Details Section */}
+        <div className="border-t border-[#2d2d2d]">
+          <button onClick={() => toggleSection('details')} className="w-full px-4 py-3 bg-[#252526]/30 hover:bg-[#2d2d2d] text-[#cccccc] flex items-center justify-between transition-colors">
+            <span className="text-[11px] font-bold uppercase tracking-widest flex items-center gap-2">
+              <Database className="h-3.5 w-3.5 text-purple-400" /> Technical Details
             </span>
-            {expandedSections.has('details') ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
+            {expandedSections.has('details') ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
+          
           {expandedSections.has('details') && (
-            <div className="p-3 bg-gray-900/50 space-y-4">
-              {/* ABI */}
-              {result.abi && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-semibold text-gray-400">Application Binary Interface (ABI)</span>
-                    <button
-                      onClick={() => copyToClipboard(JSON.stringify(result.abi, null, 2))}
-                      className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded flex items-center gap-1"
-                    >
-                      <Copy className="h-3 w-3" />
-                      Copy
-                    </button>
-                  </div>
-                  <pre className="text-xs text-gray-300 overflow-x-auto max-h-40 bg-black/30 p-2 rounded">
-                    {JSON.stringify(result.abi, null, 2)}
-                  </pre>
+            <div className="p-4 space-y-4 bg-[#1a1a1a]">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[9px] uppercase font-black text-gray-500">ABI</span>
+                  <button onClick={() => copyToClipboard(JSON.stringify(result.abi, null, 2))} className="text-[9px] px-2 py-0.5 bg-[#333] hover:bg-[#444] text-[#ccc] rounded flex items-center gap-1"><Copy className="size-2.5" /> Copy</button>
                 </div>
-              )}
-
-              {/* Bytecode */}
-              {result.bytecode && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-semibold text-gray-400">Bytecode</span>
-                    <button
-                      onClick={() => copyToClipboard(result.bytecode || '')}
-                      className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded flex items-center gap-1"
-                    >
-                      <Copy className="h-3 w-3" />
-                      Copy
-                    </button>
-                  </div>
-                  <div className="text-xs text-gray-400 mb-2">
-                    Length: {(result.bytecode || '').length} characters
-                  </div>
-                  <pre className="text-xs text-gray-300 overflow-x-auto max-h-40 bg-black/30 p-2 rounded break-all">
-                    {result.bytecode}
-                  </pre>
-                </div>
-              )}
+                <pre className="text-[10px] font-mono text-gray-400 bg-black/30 p-2 rounded max-h-32 overflow-y-auto custom-scrollbar">
+                  {JSON.stringify(result.abi, null, 2)}
+                </pre>
+              </div>
             </div>
           )}
         </div>
-
-        {/* Browser Limitation Notice */}
-        {result.isMockResult && (
-          <div className="p-3 bg-blue-900/20 border-b border-gray-700">
-            <p className="text-xs text-blue-300 flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
-              Syntax validated successfully! For real compilation and deployment, use Remix IDE or a Node.js environment.
-            </p>
-            <div className="mt-2 text-xs text-gray-400 bg-black/20 p-2 rounded">
-              <p>🔍 <strong>Browser Limitation:</strong> Real Solidity compilation requires Node.js. This IDE provides syntax validation and deployment simulation.</p>
-              <p className="mt-1">💡 <strong>Tip:</strong> Copy your code to <a href="https://remix.ethereum.org" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Remix IDE</a> for full compilation and deployment.</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

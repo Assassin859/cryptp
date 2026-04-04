@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import path from 'path';
+
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -23,10 +25,7 @@ export default defineConfig({
     'process.env': {},
   },
   resolve: {
-    alias: {
-      // Manual aliases are no longer needed for core modules, 
-      // but we keep specific overrides if necessary.
-    },
+    alias: {},
   },
   // lucide-react is standard ESM and should be optimized by Vite to avoid dynamic node_modules requests
   optimizeDeps: {
