@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings, LogOut, Github, Chrome, Mail, User as UserIcon, Loader2, Key, Bot, Database, DownloadCloud, Trash2, Eye, EyeOff } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabaseClient';
+import { getProjects, migrateWorkspacesToFiles, deleteProject } from '../utils/userData';
 
 interface SettingsSidebarProps {
   user: User | null;
@@ -90,6 +91,51 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
      try {
        await supabase.from('user_settings').delete().eq('user_id', user.id);
      } catch(e) {}
+  };
+
+  const handleDownloadWorkspace = async () => {
+    if (!user) return;
+    try {
+      const allProjects = await getProjects(user.id);
+      const withFiles = await Promise.all(allProjects.map(async p => {
+         const files = await migrateWorkspacesToFiles(user.id, p);
+         return { ...p, files };
+      }));
+      const blob = new Blob([JSON.stringify(withFiles, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cryptp_workspaces_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch(e: any) {
+      alert("Failed to export workspaces: " + e.message);
+    }
+  };
+
+  const handleEraseAccount = async () => {
+    if (!user) return;
+    if (!confirm("WARNING: This will permanently delete your workspaces, files, settings, and API keys. This CANNOT be undone. Proceed?")) return;
+    try {
+      // 1. Delete Settings
+      await supabase.from('user_settings').delete().eq('user_id', user.id);
+      
+      // 2. Delete Projects (Files will cascade delete in DB if set up, or handled by deleteProject)
+      const allProjects = await getProjects(user.id);
+      for (const p of allProjects) {
+        await deleteProject(p.id);
+      }
+
+      // 3. Purge Local Storage
+      localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
+      localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
+
+      // 4. Force Sign Out
+      alert("All data has been erased. Signing out.");
+      onSignOut();
+    } catch(e: any) {
+      alert("Failed to erase data: " + e.message);
+    }
   };
 
   if (!user) {
@@ -333,14 +379,14 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
         <div>
            <h3 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 pl-1 flex items-center gap-1.5"><Key className="size-3" /> Data & Privacy</h3>
            <div className="space-y-2">
-             <button onClick={() => alert("Downloading Workspace (Mock)...")} className="w-full flex items-center justify-between p-3 rounded-lg bg-[#121214] border border-gray-800 hover:border-gray-600 transition-colors group">
+             <button onClick={handleDownloadWorkspace} className="w-full flex items-center justify-between p-3 rounded-lg bg-[#121214] border border-gray-800 hover:border-gray-600 transition-colors group">
                 <div className="text-left">
                    <p className="text-[11px] font-bold text-gray-300 group-hover:text-white transition-colors">Download Workspace</p>
-                   <p className="text-[9px] text-gray-500">Export as .zip archive</p>
+                   <p className="text-[9px] text-gray-500">Export as .json archive</p>
                 </div>
                 <DownloadCloud className="size-4 text-gray-500 group-hover:text-white transition-colors" />
              </button>
-             <button onClick={() => alert("Erasing Account (Mock)...")} className="w-full flex items-center justify-between p-3 rounded-lg bg-red-950/10 border border-red-900/30 hover:bg-red-950/30 transition-colors group">
+             <button onClick={handleEraseAccount} className="w-full flex items-center justify-between p-3 rounded-lg bg-red-950/10 border border-red-900/30 hover:bg-red-950/30 transition-colors group">
                 <div className="text-left">
                    <p className="text-[11px] font-bold text-red-500">Erase Account</p>
                    <p className="text-[9px] text-red-500/70">Permanently wipe all data</p>

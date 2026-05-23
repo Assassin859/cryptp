@@ -8,36 +8,49 @@ import {
   ChevronDown,
   FolderOpen,
   FilePlus2,
-  FolderPlus
+  FolderPlus,
+  Home
 } from 'lucide-react';
 import { Project, ContractFile } from '../utils/userData';
 
-interface ProjectExplorerProps {
+interface ExplorerProps {
   projects: Project[];
-  currentProjectId: string | undefined;
-  activeFileId: string | undefined;
-  onSelectProject: (project: Project) => void;
-  onSelectFile: (projectId: string, file: ContractFile) => void;
+  currentProjectId?: string;
+  activeFileId?: string;
+  onSelectProject: (p: Project) => void;
   onCreateProject: () => void;
-  onDeleteProject: (projectId: string) => void;
-  onAddFile: (workspaceId: string) => void;
+  onSelectFile: (projectId: string, file: ContractFile) => void;
+  onAddFile: (projectId: string, parentPath?: string) => void;
+  onAddFolder: (projectId: string, parentPath?: string) => void;
+  onDeleteFolder?: (projectId: string, folderPath: string) => void;
+  onImportWorkspace: (projectId: string) => void;
   onDeleteFile: (fileId: string) => void;
+  onDeleteProject: (projectId: string) => void;
+  onCompileFolder?: (projectId: string, folderPath: string) => void;
+  onCompileWorkspace?: (projectId: string) => void;
 }
 
-const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ 
-  projects, 
-  currentProjectId, 
-  activeFileId,
-  onSelectProject, 
-  onSelectFile,
-  onCreateProject,
-  onDeleteProject,
-  onAddFile,
-  onDeleteFile
+const ProjectExplorer: React.FC<ExplorerProps> = ({ 
+  projects, currentProjectId, activeFileId, 
+  onSelectProject, onCreateProject, onSelectFile, onAddFile, onAddFolder, onDeleteFolder, onImportWorkspace, onDeleteFile, onDeleteProject,
+  onCompileFolder, onCompileWorkspace
 }) => {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Record<string, boolean>>({});
   // Track expanded state for nested folders: key = `${projectId}::${folderPath}`
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, type: 'folder' | 'workspace', id: string, path?: string } | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent, type: 'folder' | 'workspace', id: string, path?: string) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, type, id, path });
+  };
+
+  const closeContextMenu = () => setContextMenu(null);
+
+  React.useEffect(() => {
+    window.addEventListener('click', closeContextMenu);
+    return () => window.removeEventListener('click', closeContextMenu);
+  }, []);
 
   const toggleWorkspace = (id: string) => {
     setExpandedWorkspaces(prev => ({ ...prev, [id]: !prev[id] }));
@@ -71,13 +84,15 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
   // Recursive render component for the file tree
   const renderTree = (node: FileNode, path: string, projectId: string, depth: number = 0) => {
-    const entries = Object.values(node.children).sort((a, b) => {
-      // Folders first, then alphabetical
-      const aIsFolder = !a.file;
-      const bIsFolder = !b.file;
-      if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+    const entries = Object.values(node.children)
+      .filter(child => child.name !== '.keep' || !child.file) // Hide .keep files
+      .sort((a, b) => {
+        // Folders first, then alphabetical
+        const aIsFolder = !a.file;
+        const bIsFolder = !b.file;
+        if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
 
     return entries.map(child => {
       const currentPath = path ? `${path}/${child.name}` : child.name;
@@ -116,13 +131,39 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           <div key={folderId}>
             <div 
               onClick={() => toggleFolder(folderId)}
+              onContextMenu={(e) => handleContextMenu(e, 'folder', projectId, currentPath)}
               style={{ paddingLeft: `${(depth * 12) + 8}px` }}
-              className="group h-7 pr-2 flex items-center cursor-pointer rounded hover:bg-gray-800/30 transition-all text-gray-500 hover:text-gray-300"
+              className="group h-7 pr-2 flex items-center justify-between cursor-pointer rounded hover:bg-gray-800/30 transition-all text-gray-500 hover:text-gray-300"
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 {isExpanded ? <ChevronDown className="size-3 shrink-0" /> : <ChevronRight className="size-3 shrink-0" />}
                 <FolderOpen className={`size-3 shrink-0 ${isExpanded ? 'text-blue-400/70' : 'text-gray-600'}`} />
                 <span className="text-[10.5px] font-bold truncate tracking-tight">{child.name}</span>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onAddFile(projectId, currentPath); }}
+                  className="p-1 text-gray-600 hover:text-blue-400 hover:bg-blue-600/10 rounded transition-all"
+                  title="New File in this folder"
+                >
+                  <FilePlus2 className="size-3" />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onAddFolder(projectId, currentPath); }}
+                  className="p-1 text-gray-600 hover:text-yellow-400 hover:bg-yellow-600/10 rounded transition-all"
+                  title="New Sub-folder"
+                >
+                  <FolderPlus className="size-3" />
+                </button>
+                {onDeleteFolder && (
+                   <button 
+                     onClick={(e) => { e.stopPropagation(); onDeleteFolder(projectId, currentPath); }}
+                     className="p-1 text-gray-700 hover:text-red-500 hover:bg-red-500/10 rounded transition-all"
+                     title="Delete Folder"
+                   >
+                     <Trash2 className="size-3" />
+                   </button>
+                )}
               </div>
             </div>
             {isExpanded && (
@@ -174,11 +215,12 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                     onSelectProject(project);
                     toggleWorkspace(project.id);
                   }}
+                  onContextMenu={(e) => handleContextMenu(e, 'workspace', project.id)}
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     {expandedWorkspaces[project.id] ? <ChevronDown className="size-3 text-gray-600" /> : <ChevronRight className="size-3 text-gray-600" />}
                     <div className="flex items-center gap-2 shrink-0">
-                       <FolderOpen className={`size-3.5 ${currentProjectId === project.id ? 'text-blue-400' : 'text-gray-700'}`} />
+                       <Home className={`size-3.5 ${currentProjectId === project.id ? 'text-blue-400' : 'text-gray-700'}`} />
                     </div>
                     <span className="text-[11px] font-black truncate tracking-tight uppercase">
                       {project.name}
@@ -192,6 +234,20 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                       title="New File"
                     >
                       <FilePlus2 className="size-3.5" />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onAddFolder(project.id); }}
+                      className="p-1 text-gray-600 hover:text-yellow-400 hover:bg-yellow-600/10 rounded transition-all"
+                      title="New Folder"
+                    >
+                      <FolderPlus className="size-3.5" />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onImportWorkspace(project.id); }}
+                      className="p-1 text-gray-600 hover:text-green-400 hover:bg-green-600/10 rounded transition-all"
+                      title="Import Files/Folders"
+                    >
+                      <FileCode className="size-3.5" /> 
                     </button>
                     <button 
                       onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
@@ -231,6 +287,41 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
             </div>
          </div>
       </div>
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-[100] bg-[#252526] border border-[#454545] shadow-2xl rounded py-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          {contextMenu.type === 'folder' && (
+            <button 
+              onClick={() => { onCompileFolder?.(contextMenu.id, contextMenu.path!); closeContextMenu(); }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-blue-400 hover:bg-[#094771] hover:text-white flex items-center gap-2"
+            >
+              <FileCode className="size-3.5" /> Compile Folder
+            </button>
+          )}
+          {contextMenu.type === 'workspace' && (
+            <button 
+              onClick={() => { onCompileWorkspace?.(contextMenu.id); closeContextMenu(); }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-blue-400 hover:bg-[#094771] hover:text-white flex items-center gap-2"
+            >
+              <FileCode className="size-3.5" /> Compile Workspace
+            </button>
+          )}
+          <div className="h-px bg-gray-800 my-1" />
+          <button 
+            onClick={() => { 
+                if (contextMenu.type === 'folder') onDeleteFolder?.(contextMenu.id, contextMenu.path!);
+                else onDeleteProject(contextMenu.id);
+                closeContextMenu();
+            }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-red-500 hover:bg-red-900/20 flex items-center gap-2"
+          >
+            <Trash2 className="size-3.5" /> Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { Common } from '@ethereumjs/common';
 import { Address, Account, bytesToHex, hexToBytes } from '@ethereumjs/util';
 import { TransactionFactory } from '@ethereumjs/tx';
 import { keccak256 } from 'ethereum-cryptography/keccak';
+import { priceService } from './PriceService';
 
 
 export interface EventLog {
@@ -29,6 +30,7 @@ class BrowserVM {
   private evmPrivateKeys: Uint8Array[] = [];
   private activeAccountIndex: number = 0;
   private transactionTraces = new Map<string, any>();
+  private blockNumber: number = 18000000; // Realistic starting block
 
 
   constructor() {
@@ -69,7 +71,20 @@ class BrowserVM {
   }
 
   async getBlockNumber(): Promise<number> {
-      return 42; // EVM blocks initialized count
+      return this.blockNumber;
+  }
+
+  async getAccountBalance(addressStr: string): Promise<string> {
+      await this.init();
+      if (!this.evmInstance) return '0';
+      
+      try {
+        const address = Address.fromString(addressStr);
+        const account = await this.evmInstance.stateManager.getAccount(address);
+        return account ? ethers.formatEther(account.balance) : '0';
+      } catch (e) {
+        return '0';
+      }
   }
 
   getAccounts() {
@@ -110,10 +125,13 @@ class BrowserVM {
       const accountState = await this.evmInstance.stateManager.getAccount(currentAccount);
       const currentNonce = accountState ? accountState.nonce : 0n;
 
+      const gasPriceGwei = await priceService.getGasPrice();
+      const gasPriceWei = BigInt(Math.floor(gasPriceGwei * 1e9));
+
       const txData = {
           nonce: currentNonce,
           gasLimit: BigInt(gasLimit),
-          gasPrice: 1000000000n, // 1 gwei
+          gasPrice: gasPriceWei,
           data,
       };
 
@@ -159,6 +177,7 @@ class BrowserVM {
           data: bytesToHex(l[2])
       })) || [];
 
+      this.blockNumber++; // Increment block on successful deployment
       return {
           contractAddress: result.createdAddress ? result.createdAddress.toString() : '0x0',
           transactionHash: bytesToHex(tx.hash()),
@@ -230,11 +249,14 @@ class BrowserVM {
         const accountState = await this.evmInstance.stateManager.getAccount(currentAccount);
         const currentNonce = accountState ? accountState.nonce : 0n;
 
+        const gasPriceGwei = await priceService.getGasPrice();
+        const gasPriceWei = BigInt(Math.floor(gasPriceGwei * 1e9));
+
         const txData = {
             to,
             nonce: currentNonce,
             gasLimit: 3000000n,
-            gasPrice: 1000000000n, // 1 gwei
+            gasPrice: gasPriceWei,
             value,
             data: hexToBytes(data.startsWith('0x') ? data : '0x' + data),
         };
@@ -281,6 +303,7 @@ class BrowserVM {
             data: bytesToHex(l[2])
         })) || [];
 
+        this.blockNumber++; // Increment block on successful txn
         return {
             transactionHash: bytesToHex(tx.hash()),
             gasUsed: gasUsedNum,

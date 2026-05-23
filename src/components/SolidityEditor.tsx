@@ -91,7 +91,7 @@ const SolidityEditor: React.FC<SolidityEditorProps> = ({
                 <span className="text-[8px] text-gray-600 font-black uppercase tracking-tighter">Scanning...</span>
              </div>
            )}
-           {!isScanning && securityReport && (
+           {!isScanning && securityReport && securityReport.score !== -1 && (
              <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded border mr-2 ${securityReport.score < 70 ? 'bg-red-500/5 border-red-500/20 text-red-500' : 'bg-green-500/5 border-green-500/20 text-green-500'}`}>
                 <ShieldCheck className="size-2.5" />
                 <span className="text-[8px] font-black">{securityReport.score}% Safe</span>

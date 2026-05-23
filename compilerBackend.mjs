@@ -20,8 +20,10 @@ app.post('/compile', async (req, res) => {
     return res.status(400).json({ error: 'Missing sourceCode' });
   }
 
+  const activeFileName = req.body.activeFileName || 'contract.sol';
+
   let baseSources = {
-    'contract.sol': {
+    [activeFileName]: {
       content: sourceCode,
     },
   };
@@ -62,7 +64,8 @@ app.post('/compile', async (req, res) => {
       }
     }
 
-    const contracts = output.contracts['contract.sol'];
+    const activeFileName = req.body.activeFileName || 'contract.sol';
+    const contracts = output.contracts[activeFileName] || output.contracts[Object.keys(output.contracts || {})[0]];
     let name = contractName;
     if (!contracts[name]) {
        name = Object.keys(contracts)[0];

@@ -15,24 +15,18 @@ import { Github } from 'lucide-react';
 
 interface NewWorkspaceModalProps {
   onClose: () => void;
-  onCreate: (workspaceName: string, fileName: string, templateId: string) => void;
+  onCreate: (workspaceName: string) => void;
   onOpenGitHubImport?: () => void;
 }
 
 const NewWorkspaceModal: React.FC<NewWorkspaceModalProps> = ({ onClose, onCreate, onOpenGitHubImport }) => {
   const [workspaceName, setWorkspaceName] = useState('');
-  const [fileName, setFileName] = useState('Main');
-  const [selectedTemplate, setSelectedTemplate] = useState('basic');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!workspaceName.trim() || !fileName.trim()) return;
+    if (!workspaceName.trim()) return;
     
-    // Auto-append .sol if missing
-    let finalFileName = fileName.trim();
-    if (!finalFileName.endsWith('.sol')) finalFileName += '.sol';
-    
-    onCreate(workspaceName.trim(), finalFileName, selectedTemplate);
+    onCreate(workspaceName.trim());
   };
 
   const getTemplateIcon = (id: string) => {
@@ -95,55 +89,6 @@ const NewWorkspaceModal: React.FC<NewWorkspaceModalProps> = ({ onClose, onCreate
             />
           </div>
 
-          {/* Initial Contract Name */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Initial Contract Name</label>
-            <div className="relative group">
-              <input 
-                type="text" 
-                placeholder="e.g. Vault"
-                value={fileName}
-                onChange={(e) => setFileName(e.target.value.replace(/\s+/g, ''))}
-                className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg p-3 pr-12 text-xs text-[#cccccc] focus:outline-none focus:border-[#007acc] transition-all placeholder:text-[#444]"
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-mono text-gray-600 font-bold">.sol</div>
-            </div>
-            <div className="flex items-center gap-1.5 text-[9px] text-[#858585] ml-1">
-               <Info className="size-3" />
-               <span>Contracts are interlinked within the workspace.</span>
-            </div>
-          </div>
-
-          {/* Template Selection */}
-          <div className="space-y-2">
-             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Boilerplate Template</label>
-             <div className="grid grid-cols-1 gap-2 max-h-[160px] overflow-y-auto custom-scrollbar pr-2">
-                {allTemplates.map((template) => (
-                  <button
-                    key={template.id}
-                    type="button"
-                    onClick={() => setSelectedTemplate(template.id)}
-                    className={`flex items-center justify-between p-2.5 rounded-lg border transition-all text-left group ${
-                      selectedTemplate === template.id 
-                        ? 'bg-blue-600/10 border-blue-500/50 text-white' 
-                        : 'bg-[#252526] border-[#3c3c3c] text-gray-400 hover:border-[#444] hover:bg-[#2d2d2d]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                       <div className={`p-1.5 rounded bg-[#1e1e1e] border border-[#333] ${selectedTemplate === template.id ? 'border-blue-500/30' : ''}`}>
-                          {getTemplateIcon(template.id)}
-                       </div>
-                       <div>
-                          <p className="text-[10px] font-bold tracking-tight">{template.name}</p>
-                          <p className="text-[8px] text-gray-600 uppercase font-black">{template.id === 'erc721' ? 'NFT' : 'Standard'}</p>
-                       </div>
-                    </div>
-                    {selectedTemplate === template.id && <ChevronRight className="size-3 text-blue-500" />}
-                  </button>
-                ))}
-             </div>
-          </div>
-
           {/* Actions */}
           <div className="pt-2 flex gap-3">
              <button 
@@ -155,9 +100,9 @@ const NewWorkspaceModal: React.FC<NewWorkspaceModalProps> = ({ onClose, onCreate
              </button>
              <button 
               type="submit"
-              disabled={!workspaceName.trim() || !fileName.trim()}
+              disabled={!workspaceName.trim()}
               className={`flex-1 px-4 py-2.5 text-xs font-bold text-white rounded-lg transition-all shadow-lg shadow-blue-900/20 ${
-                workspaceName.trim() && fileName.trim() 
+                workspaceName.trim() 
                   ? 'bg-[#007acc] hover:bg-blue-500' 
                   : 'bg-gray-800 text-gray-600 cursor-not-allowed'
               }`}

@@ -20,13 +20,13 @@ interface CompileOutputProps {
   result: CompilationResult;
   code?: string;
   onDeployment?: (entry: SimulatedDeployment) => void;
+  deploymentResult?: SimulatedDeployment | null;
 }
 
-const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) => {
+const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, deploymentResult }) => {
   const { account, networkName, isConnected, connect } = useWeb3();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview']));
   const [isDeploying, setIsDeploying] = useState(false);
-  const [deploymentResult, setDeploymentResult] = useState<SimulatedDeployment | null>(null);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [executionEnv, setExecutionEnv] = useState<'sandbox' | 'injected'>('sandbox');
 
@@ -61,7 +61,6 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
 
     setIsDeploying(true);
     setDeploymentError(null);
-    setDeploymentResult(null);
 
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
@@ -87,7 +86,6 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
         isRealChain: true
       };
 
-      setDeploymentResult(deploymentEntry);
       onDeployment?.(deploymentEntry);
     } catch (error: any) {
       setDeploymentError(error?.message || 'Deployment failed');
@@ -101,7 +99,6 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
 
     setIsDeploying(true);
     setDeploymentError(null);
-    setDeploymentResult(null);
 
     try {
       const { browserVM } = await import('../utils/browserVM');
@@ -120,7 +117,6 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
         isRealChain: false
       };
 
-      setDeploymentResult(simulated);
       onDeployment?.(simulated);
     } catch (error: any) {
       setDeploymentError(error?.message || 'Local simulation failed');
@@ -139,11 +135,19 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {result.errors?.map((error: any, idx: number) => (
-            <div key={idx} className="p-3 rounded bg-red-900/10 border border-red-700/30 text-[11px] font-mono text-red-300">
-              {error.message}
-            </div>
-          ))}
+          {result.errors?.map((error: any, idx: number) => {
+            const line = error.sourceLocation?.start;
+            const fileName = error.sourceLocation?.file || 'contract.sol';
+            return (
+              <div key={idx} className="p-3 rounded bg-red-900/10 border border-red-700/30 text-[11px] font-mono text-red-300 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase text-red-500/60">
+                  <span>{fileName}</span>
+                  {line !== undefined && <span className="px-1 bg-red-500/20 rounded">Line {line}</span>}
+                </div>
+                <div className="leading-relaxed whitespace-pre-wrap">{error.message}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -169,14 +173,22 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
           </button>
           
           {expandedSections.has('overview') && (
-            <div className="p-4 grid grid-cols-2 gap-3 bg-[#1a1a1a]">
+            <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-3 bg-[#1a1a1a]">
               <div className="bg-[#252526] p-3 rounded border border-[#333]">
                 <div className="text-[9px] uppercase font-black text-gray-500 mb-1">Contract Size</div>
                 <div className="text-xs font-mono text-green-400">{result.contractSize || '0'} bytes</div>
               </div>
               <div className="bg-[#252526] p-3 rounded border border-[#333]">
-                <div className="text-[9px] uppercase font-black text-gray-500 mb-1">Functions</div>
-                <div className="text-xs font-mono text-blue-400">{result.abi?.filter((i: any) => i.type === 'function').length || 0}</div>
+                <div className="text-[9px] uppercase font-black text-gray-500 mb-1">Total Functions</div>
+                <div className="text-xs font-mono text-blue-400">
+                  {result.abi?.filter((i: any) => i.type === 'function').length || 0}
+                </div>
+              </div>
+              <div className="bg-[#252526] p-3 rounded border border-[#333] col-span-2 md:col-span-1">
+                <div className="text-[9px] uppercase font-black text-gray-500 mb-1">State Functions</div>
+                <div className="text-xs font-mono text-blue-400">
+                  {result.abi?.filter((i: any) => i.type === 'function' && i.stateMutability !== 'view' && i.stateMutability !== 'pure').length || 0}
+                </div>
               </div>
             </div>
           )}
@@ -201,34 +213,32 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment }) =
             </div>
 
             {/* Actions */}
-            {!deploymentResult && !deploymentError && (
-              <div className="space-y-3 pt-2">
-                {executionEnv === 'injected' && !isConnected ? (
-                  <button
-                    onClick={connect}
-                    className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
-                  >
-                    <Wallet className="size-4" /> Connect Wallet to Deploy
-                  </button>
-                ) : (
-                  <button
-                    onClick={executionEnv === 'sandbox' ? deployLocalSimulation : deployWithMetaMask}
-                    disabled={isDeploying}
-                    className={`w-full px-4 py-3 rounded font-bold text-xs flex flex-col items-center justify-center transition-all shadow-lg active:scale-95 group ${
-                      executionEnv === 'sandbox' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-[#007acc] hover:bg-[#0062a3]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {isDeploying ? <Loader className="size-4 animate-spin text-white" /> : <Rocket className="size-4 text-white group-hover:scale-110 transition-transform" />}
-                      <span>{executionEnv === 'sandbox' ? 'Deploy to Sandbox' : `Deploy to ${networkName || 'Network'}`}</span>
-                    </div>
-                    <span className="text-[9px] opacity-60 font-medium mt-0.5">
-                      {executionEnv === 'sandbox' ? 'Instant • No Gas Required' : `Account: ${account?.slice(0, 10)}...`}
-                    </span>
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="space-y-3 pt-2">
+              {executionEnv === 'injected' && !isConnected ? (
+                <button
+                  onClick={connect}
+                  className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
+                >
+                  <Wallet className="size-4" /> Connect Wallet to Deploy
+                </button>
+              ) : (
+                <button
+                  onClick={executionEnv === 'sandbox' ? deployLocalSimulation : deployWithMetaMask}
+                  disabled={isDeploying}
+                  className={`w-full px-4 py-3 rounded font-bold text-xs flex flex-col items-center justify-center transition-all shadow-lg active:scale-95 group ${
+                    executionEnv === 'sandbox' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-[#007acc] hover:bg-[#0062a3]'
+                  } ${isDeploying ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    {isDeploying ? <Loader className="size-4 animate-spin text-white" /> : <Rocket className="size-4 text-white group-hover:scale-110 transition-transform" />}
+                    <span>{executionEnv === 'sandbox' ? 'Deploy to Sandbox' : `Deploy to ${networkName || 'Network'}`}</span>
+                  </div>
+                  <span className="text-[9px] opacity-60 font-medium mt-0.5">
+                    {executionEnv === 'sandbox' ? 'Instant • No Gas Required' : `Account: ${account?.slice(0, 10)}...`}
+                  </span>
+                </button>
+              )}
+            </div>
 
             {/* Error Message */}
             {deploymentError && (

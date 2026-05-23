@@ -134,6 +134,23 @@ const RULES = {
 };
 
 export const scanContract = (sourceCode: string): SecurityReport => {
+  // 0. Hardened Trivial Content Check
+  const trimmedCode = sourceCode.trim();
+  const lines = trimmedCode.split('\n');
+  const nonCommentLines = lines.filter(line => {
+    const l = line.trim();
+    return l.length > 0 && !l.startsWith('//') && !l.startsWith('/*') && !l.startsWith('*');
+  });
+
+  // If code is empty, or just comments, or just a pragma without logic
+  if (nonCommentLines.length === 0 || (nonCommentLines.length === 1 && nonCommentLines[0].includes('pragma'))) {
+    return {
+      score: -1, // Use -1 as sentinel for "No Analysis Available"
+      findings: [],
+      summary: { high: 0, medium: 0, low: 0, info: 0 }
+    };
+  }
+
   const findings: SecurityFinding[] = [];
   const stateVariables: string[] = [];
   let solidityVersion = '0.8.0';
@@ -142,7 +159,7 @@ export const scanContract = (sourceCode: string): SecurityReport => {
   
   try {
     let hasContract = false;
-    const ast = parser.parse(sourceCode, { range: true, loc: true });
+    const ast = parser.parse(sourceCode, { range: true, loc: true, tolerant: true });
     
     parser.visit(ast, {
       PragmaDirective: (node) => {
@@ -158,9 +175,13 @@ export const scanContract = (sourceCode: string): SecurityReport => {
       },
 
       StateVariableDeclaration: (node: any) => {
-        node.variables.forEach((v: any) => {
-          if (v.identifier) stateVariables.push(v.identifier.name);
-        });
+        if (node.variables) {
+          node.variables.forEach((v: any) => {
+            if (v && v.identifier && v.identifier.name) {
+              stateVariables.push(v.identifier.name);
+            }
+          });
+        }
       },
 
       // 1. Check for tx.origin & block.timestamp
@@ -280,7 +301,7 @@ export const scanContract = (sourceCode: string): SecurityReport => {
                 // Potential Reentrancy!
                 findings.push({
                   ...RULES.REENTRANCY,
-                  range: exprNode.loc
+                  range: exprNode.loc || undefined
                 });
                 hasExternalCall = false; // Reset after finding to avoid duplicates
               }
@@ -322,7 +343,11 @@ export const scanContract = (sourceCode: string): SecurityReport => {
     }
 
   } catch (error) {
-    console.warn('Security scan failed to parse AST:', error);
+    console.debug('[Forensic] Security scan skipped AST analysis (Syntax in flux):', error);
+    // Basic heuristic fallback for common patterns
+    if (sourceCode.includes('tx.origin')) {
+      findings.push({ ...RULES.TX_ORIGIN });
+    }
   }
 
   const summary = {

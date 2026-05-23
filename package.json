@@ -38,7 +38,7 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "solc": "^0.8.34",
+    "solc": "^0.8.20",
     "stream-browserify": "^3.0.0",
     "util": "^0.12.5",
     "vite-plugin-node-polyfills": "^0.25.0"

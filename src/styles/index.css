@@ -71,3 +71,10 @@
 .animate-in {
   animation: fadeIn 0.3s ease forwards;
 }
+
+/* Remove distracting focus outlines on charts and SVGs */
+.recharts-wrapper:focus,
+.recharts-surface:focus,
+svg:focus {
+  outline: none !important;
+}

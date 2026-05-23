@@ -10,8 +10,8 @@ interface TokenSearchProps {
 interface SearchResult {
   project: Project;
   file: ContractFile;
-  matchLine?: string;
-  lineNumber?: number;
+  fileNameMatch: boolean;
+  matches: { line: string; num: number }[];
 }
 
 const TokenSearch: React.FC<TokenSearchProps> = ({ projects, onSelectResult }) => {
@@ -25,27 +25,24 @@ const TokenSearch: React.FC<TokenSearchProps> = ({ projects, onSelectResult }) =
 
     projects.forEach(project => {
       project.files?.forEach(file => {
-        // Search by file name
-        if (file.name.toLowerCase().includes(lowerTerm)) {
-          found.push({ project, file });
-          return;
-        }
+        const fileNameMatch = file.name.toLowerCase().includes(lowerTerm);
+        const matches: { line: string; num: number }[] = [];
 
-        // Search by content
         if (file.content) {
           const lines = file.content.split('\n');
           for (let i = 0; i < lines.length; i++) {
             if (lines[i].toLowerCase().includes(lowerTerm)) {
-              found.push({
-                project,
-                file,
-                matchLine: lines[i].trim(),
-                lineNumber: i + 1
+              matches.push({
+                line: lines[i].trim(),
+                num: i + 1
               });
-              // Limit matches to first found per file to avoid flooding
-              break; 
+              if (matches.length > 15) break; // Cap at 15 matches per file
             }
           }
+        }
+
+        if (fileNameMatch || matches.length > 0) {
+           found.push({ project, file, fileNameMatch, matches });
         }
       });
     });
@@ -93,13 +90,23 @@ const TokenSearch: React.FC<TokenSearchProps> = ({ projects, onSelectResult }) =
                   <span>{result.project.name}</span>
                 </div>
 
-                {result.matchLine && (
-                  <div className="mt-1 pl-5">
+                {result.matches.slice(0, 3).map((match, i) => (
+                  <div key={i} className="mt-1 pl-5">
                     <div className="bg-[#1e1e1e] p-1.5 rounded text-[10px] font-mono text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap border border-[#333]">
-                      <span className="text-blue-400 select-none mr-2">{result.lineNumber}:</span>
-                      {result.matchLine}
+                      <span className="text-[#007acc] select-none mr-2">{match.num}:</span>
+                      {/* Highlight match */}
+                      {match.line.split(new RegExp(`(${searchTerm})`, 'gi')).map((part, k) => (
+                         part.toLowerCase() === searchTerm.toLowerCase() 
+                           ? <span key={k} className="bg-blue-500/30 text-blue-300 rounded px-0.5">{part}</span>
+                           : <span key={k}>{part}</span>
+                      ))}
                     </div>
                   </div>
+                ))}
+                {result.matches.length > 3 && (
+                   <div className="pl-5 mt-0.5 text-[9px] text-[#858585] italic">
+                     +{result.matches.length - 3} more matches...
+                   </div>
                 )}
               </div>
             ))}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileCode, 
   Play, 
@@ -46,6 +46,7 @@ import TokenSearch from './TokenSearch';
 import SecurityAudit from './SecurityAudit';
 import AIChat from './AIChat';
 import NewWorkspaceModal from './NewWorkspaceModal';
+import AddFileModal from './AddFileModal';
 import { GitHubSyncModal } from './GitHubSyncModal';
 import LinkIdentityModal from './LinkIdentityModal';
 import AnalyticsSidebar from './AnalyticsSidebar';
@@ -101,18 +102,33 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
+  const [hasCompiledInSession, setHasCompiledInSession] = useState(false);
   const [aiPromptOverride, setAiPromptOverride] = useState<{prompt: string, theme: string} | null>(null);
+  const [activeCompileDeployment, setActiveCompileDeployment] = useState<SimulatedDeployment | null>(null);
 
   const [simulations, setSimulations] = useState<SimulatedDeployment[]>([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   
   const [activeFileId, setActiveFileId] = useState<string | undefined>(undefined);
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
+  const [showAddFileModal, setShowAddFileModal] = useState(false);
+  const [addFileContext, setAddFileContext] = useState<{ workspaceId: string, parentPath?: string } | null>(null);
   const [showGitHubModal, setShowGitHubModal] = useState(false);
   const [showLinkIdentityModal, setShowLinkIdentityModal] = useState(false);
   const [githubModalInitialTab, setGithubModalTab] = useState<'import' | 'export' | 'sync' | undefined>(undefined);
   
+  const fileStateCache = useRef<Record<string, {
+      compileResult: CompilationResult | null;
+      securityReport: SecurityReport | null;
+      simulations: SimulatedDeployment[];
+      hasCompiledInSession: boolean;
+      activeCompileDeployment: SimulatedDeployment | null;
+  }>>({});
+  const switchingFileRef = useRef(false);
+
   const [activeDeployment, setActiveDeployment] = useState<{address: string, abi: any, network: string} | null>(null);
+  const [compilerVersion, setCompilerVersion] = useState<string>('0.8.20');
+  const [versionNotification, setVersionNotification] = useState<{message: string, type: 'info' | 'success'} | null>(null);
 
   const startResizingSidebar = (e: React.MouseEvent) => { e.preventDefault(); setIsResizingSidebar(true); };
   const startResizingRightSidebar = (e: React.MouseEvent) => { e.preventDefault(); setIsResizingRightSidebar(true); };
@@ -209,43 +225,99 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   }, [userId]);
 
   useEffect(() => {
-    if (!code || isLoadingProjects || !activeFileId) return;
+    if (code === undefined || isLoadingProjects || !activeFileId) return;
     const saveCode = async () => { 
-      if (activeFileId) await updateFile(activeFileId, code); 
+      if (activeFileId) {
+         await updateFile(activeFileId, code);
+         setProjects(prev => prev.map(p => {
+           if (p.id !== currentProject?.id) return p;
+           return { ...p, files: p.files?.map(f => f.id === activeFileId ? { ...f, content: code } : f) };
+         }));
+      }
     };
+    
+    if (switchingFileRef.current) {
+        switchingFileRef.current = false;
+        const cached = fileStateCache.current[activeFileId];
+        if (cached) {
+            setCompileResult(cached.compileResult);
+            setSecurityReport(cached.securityReport);
+            setSimulations(cached.simulations);
+            setHasCompiledInSession(cached.hasCompiledInSession);
+            setActiveCompileDeployment(cached.activeCompileDeployment || null);
+        } else {
+            setCompileResult(null);
+            setSecurityReport(null);
+            setSimulations([]);
+            setHasCompiledInSession(false);
+            setActiveCompileDeployment(null);
+        }
+        return;
+    }
+
+    // DirtyState Detection: If code changes, the previous compilation result 
+    // is no longer strictly accurate for forensic analysis.
+    setHasCompiledInSession(false);
+    
     const timeoutId = setTimeout(saveCode, 1000);
+    setSecurityReport(null); // Mark security report as stale/cleared when editing starts
     return () => clearTimeout(timeoutId);
   }, [code, activeFileId, isLoadingProjects]);
 
-
-
   useEffect(() => {
-    if (!code || isLoadingProjects) return;
-    const performScan = () => { setIsScanning(true); try { setSecurityReport(scanContract(code)); } finally { setIsScanning(false); } };
-    const timeoutId = setTimeout(performScan, 500); 
-    return () => clearTimeout(timeoutId);
-  }, [code, isLoadingProjects]);
+    if (currentProject) {
+        const updated = projects.find(p => p.id === currentProject.id);
+        if (updated && updated !== currentProject) {
+            setCurrentProject(updated);
+        }
+    }
+  }, [projects]);
+
+
+
+
 
   const handleCompilationComplete = (result: CompilationResult | null) => {
     setCompileResult(result);
-    if (result && currentProject) {
+    setActiveCompileDeployment(null);
+    if (result && result.success && currentProject) {
+       setHasCompiledInSession(true);
        saveCompilation(userId, currentProject.id, result);
+       
+       // Trigger Forensic Analysis only on successful compilation
+       setIsScanning(true);
+       try {
+         const report = scanContract(code);
+         setSecurityReport(report);
+       } finally {
+         setIsScanning(false);
+       }
+
        setShowBottomPanel(true);
        setActiveBottomTab('output');
+    } else {
+       setHasCompiledInSession(false);
+       setSecurityReport(null); // Clear security findings on compilation failure
     }
   };
 
-  const triggerCompile = async () => {
-    if (!code) return;
+  const triggerCompile = async (forceCompileAll: boolean = false, targetFilesOverride?: { name: string, content: string }[]) => {
+    if (!code && !forceCompileAll) return;
     setIsCompiling(true);
     try {
-      // Find template by name for pre-compiled bytecode optimization
       const template = allTemplates.find(t => t.code === code);
       const hardcodedBytecode = template?.hardcodedBytecode;
-      const projectFilesMap = currentProject?.files?.map((f: ContractFile) => ({ name: f.name, content: f.content }));
+      const projectFilesMap = targetFilesOverride || currentProject?.files?.map((f: ContractFile) => ({ 
+        name: f.name, 
+        content: f.id === activeFileId ? code : f.content 
+      }));
       
       const { compileWithHardhat } = await import('../utils/hardhatCompiler');
-      const result = await compileWithHardhat(code, hardcodedBytecode, projectFilesMap);
+      // If forceCompileAll is true, we pass a special flag in sourceCode to hardhatCompiler
+      const sourceSet = forceCompileAll ? '__COMPILE_ALL__' : code;
+      const activeFileName = projects.find(p => p.id === currentProject?.id)?.files?.find((f: ContractFile) => f.id === activeFileId)?.name || 'contract.sol';
+      
+      const result = await compileWithHardhat(sourceSet, hardcodedBytecode, projectFilesMap, compilerVersion, undefined, activeFileName);
       handleCompilationComplete(result);
     } catch (error) {
       console.error('Compilation error:', error);
@@ -256,6 +328,28 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     } finally {
       setIsCompiling(false);
     }
+  };
+
+  const handleCompileFolder = async (projectId: string, folderPath: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project || !project.files) return;
+    
+    // Filter files in this folder
+    const folderFiles = project.files
+        .filter(f => f.name.startsWith(folderPath + '/'))
+        .map(f => ({ name: f.name, content: f.id === activeFileId ? code : f.content }));
+    
+    if (folderFiles.length === 0) {
+        alert("No contracts found in this folder.");
+        return;
+    }
+    
+    // In our simplified browser compiler, 'compile folder' will treat all files in folder as valid targets
+    await triggerCompile(true, folderFiles);
+  };
+
+  const handleCompileWorkspace = async (_projectId: string) => {
+    await triggerCompile(true);
   };
 
   const triggerAIDeploy = async () => {
@@ -344,25 +438,24 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
      }
   };
 
-  const handleCreateWorkspace = async (wsName: string, fName: string, templateId: string) => {
+  const handleCreateWorkspace = async (wsName: string) => {
     try {
-      const template = allTemplates.find(t => t.id === templateId);
-      if (!template) return;
-
+      // Create a basic workspace
       const newWS = await createProject(userId, { 
         name: wsName, 
         code: '', 
-        template: template.id, 
-        type: template.id === 'erc721' ? 'ERC721' : 'ERC20' 
+        template: 'basic', 
+        type: 'ERC20' 
       });
 
-      const newFile = await createFile(userId, newWS.id, fName, template.code);
+      // Create a hidden .keep file so the explorer shows something or a README
+      const newFile = await createFile(userId, newWS.id, '.keep', '');
       const wsWithFile = { ...newWS, files: [newFile] };
 
       setProjects([wsWithFile, ...projects]);
       setCurrentProject(wsWithFile);
-      setActiveFileId(newFile.id);
-      setCode(newFile.content);
+      setActiveFileId(undefined); // No active file initially since it's just a .keep
+      setCode('');
       setShowWorkspaceModal(false);
     } catch (e) {
       console.error('Failed to create workspace:', e);
@@ -370,23 +463,141 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   };
 
   const handleSelectFile = async (projectId: string, file: ContractFile) => {
+     if (activeFileId === file.id) return;
+     
+     if (activeFileId && code !== undefined) {
+       updateFile(activeFileId, code).catch(console.error);
+       setProjects(prev => prev.map(p => ({
+         ...p,
+         files: p.files?.map(f => f.id === activeFileId ? { ...f, content: code } : f)
+       })));
+       
+       fileStateCache.current[activeFileId] = {
+           compileResult,
+           securityReport,
+           simulations,
+           hasCompiledInSession,
+           activeCompileDeployment
+       };
+     }
+     
+     switchingFileRef.current = true;
+     
      setActiveFileId(file.id);
      setCode(file.content);
      const project = projects.find(p => p.id === projectId);
      if (project) setCurrentProject(project);
   };
 
-  const handleAddFile = async (workspaceId: string) => {
-    const name = prompt('Contract name?', 'NewContract.sol');
-    if (!name) return;
-    const finalName = name.endsWith('.sol') ? name : `${name}.sol`;
+  const handleAddFile = async (workspaceId: string, parentPath?: string) => {
+    setAddFileContext({ workspaceId, parentPath });
+    setShowAddFileModal(true);
+  };
+
+  const handleConfirmAddFile = async (fileName: string, templateId: string) => {
+    if (!addFileContext) return;
+    const { workspaceId, parentPath } = addFileContext;
+    
+    let content = '// New Contract';
+    if (templateId === 'empty') {
+      content = '// SPDX-License-Identifier: MIT\npragma solidity 0.8.20;\n\ncontract NewContract {\n    \n}';
+    } else {
+      const template = allTemplates.find(t => t.id === templateId);
+      if (template) content = template.code;
+    }
+
+    const finalName = parentPath ? `${parentPath}/${fileName}` : fileName;
     
     try {
-      const file = await createFile(userId, workspaceId, finalName, '// New Contract');
-      setProjects(projects.map(p => p.id === workspaceId ? { ...p, files: [...(p.files || []), file] } : p));
+      const file = await createFile(userId, workspaceId, finalName, content);
+      setProjects(prev => prev.map(p => p.id === workspaceId ? { ...p, files: [...(p.files || []), file] } : p));
       setActiveFileId(file.id);
       setCode(file.content);
-    } catch (e) { console.error('Failed to add file:', e); }
+      setShowAddFileModal(false);
+      setAddFileContext(null);
+    } catch (e: any) { 
+        console.error('Failed to add file:', e);
+        alert(e.message || 'Failed to add file');
+    }
+  };
+
+  const handleAddFolder = async (workspaceId: string, parentPath?: string) => {
+    const name = prompt('Folder name?', 'new_folder');
+    if (!name) return;
+    
+    const folderPath = parentPath ? `${parentPath}/${name}` : name;
+    const placeholderPath = `${folderPath}/.keep`;
+    
+    try {
+      const file = await createFile(userId, workspaceId, placeholderPath, '');
+      setProjects(projects.map(p => p.id === workspaceId ? { ...p, files: [...(p.files || []), file] } : p));
+    } catch (e: any) {
+        console.error('Failed to add folder:', e);
+        alert(e.message || 'Failed to add folder');
+    }
+  };
+
+  const handleDeleteFolder = async (workspaceId: string, folderPath: string) => {
+     if (!confirm(`Are you sure you want to delete the folder "${folderPath}" and all its contents?`)) return;
+     const project = projects.find(p => p.id === workspaceId);
+     if (!project || !project.files) return;
+     
+     const filesToDelete = project.files.filter(f => f.name.startsWith(folderPath + '/'));
+     try {
+        await Promise.all(filesToDelete.map(f => deleteFile(f.id)));
+        setProjects(projects.map(p => p.id === workspaceId ? { ...p, files: p.files!.filter(f => !f.name.startsWith(folderPath + '/')) } : p));
+        if (activeFileId && filesToDelete.some(f => f.id === activeFileId)) {
+           setActiveFileId(undefined); setCode('');
+        }
+     } catch(e) { console.error('Delete folder failed', e); }
+  };
+
+
+  const handleImportWorkspace = (workspaceId: string) => {
+     const input = document.getElementById('workspace-import-input') as HTMLInputElement;
+     if (input) {
+       input.dataset.workspaceId = workspaceId;
+       input.click();
+     }
+  };
+
+  const onWorkspaceFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    const workspaceId = e.target.dataset.workspaceId;
+    if (!files || !workspaceId) return;
+
+    const project = projects.find(p => p.id === workspaceId);
+    if (!project) return;
+
+    let importedCount = 0;
+    const newFiles: ContractFile[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const path = (file as any).webkitRelativePath || file.name;
+      // Remove the top-level folder name from the path if it's there
+      const parts = path.split('/');
+      const finalPath = parts.slice(1).join('/') || path;
+
+      if (!finalPath) continue;
+
+      try {
+        const content = await file.text();
+        const created = await createFile(userId, workspaceId, finalPath, content);
+        newFiles.push(created);
+        importedCount++;
+      } catch (err) {
+        console.warn(`Skipped ${finalPath}:`, err);
+      }
+    }
+
+    if (importedCount > 0) {
+      setProjects(projects.map(p => p.id === workspaceId ? { ...p, files: [...(p.files || []), ...newFiles] } : p));
+      alert(`Successfully imported ${importedCount} items.`);
+    }
+    
+    // Clear input
+    e.target.value = '';
   };
 
   const handleDeleteFile = async (fileId: string) => {
@@ -466,7 +677,9 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       alert('Please select or create a workspace first.');
       return;
     }
-    const name = `${type}_${Date.now()}.sol`;
+    const inputName = prompt('Enter your token file name (e.g. MyToken):', `${type}Token.sol`);
+    if (!inputName) return;
+    const name = inputName.endsWith('.sol') ? inputName : `${inputName}.sol`;
     try {
       // 1. Create the permanent file
       const file = await createFile(userId, currentProject.id, name, codeContent);
@@ -564,6 +777,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     }
   };
 
+  const handleVersionChange = (newVersion: string) => {
+    setCompilerVersion(newVersion);
+    setVersionNotification({ message: `Compiler set to v${newVersion}`, type: 'success' });
+    setTimeout(() => setVersionNotification(null), 3000);
+  };
+
+
+
   const handleBeforeIdentityLink = async () => {
     if (activeFileId && code) {
       await updateFile(activeFileId, code);
@@ -573,31 +794,48 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   return (
     <div className="h-screen flex flex-col bg-[#1e1e1e] text-[#cccccc] selection:bg-blue-500/30 overflow-hidden font-sans relative">
       
-      {!(window as any).ethereum && (
-        <div className="bg-red-900/40 border-b border-red-500/30 px-4 py-1.5 flex items-center justify-center gap-2 z-[70] shrink-0">
-          <Terminal className="h-3.5 w-3.5 text-red-400" />
-          <span className="text-xs text-red-200 font-medium">
-            MetaMask not detected. Live deployment and network promotion features are currently disabled.
+      {/* 🔔 Version Shift Notification */}
+      {versionNotification && (
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300">
+           <div className={`px-4 py-2 rounded-full border shadow-2xl flex items-center gap-2 ${
+             versionNotification.type === 'success' ? 'bg-[#007acc]/20 border-[#007acc] text-blue-100' : 'bg-yellow-500/20 border-yellow-500 text-yellow-100'
+           }`}>
+              <Check className="size-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider">{versionNotification.message}</span>
+           </div>
+        </div>
+      )}
+       {!(window as any).ethereum && (
+        <div className="bg-red-950/20 backdrop-blur-md border-b border-red-500/10 px-4 py-1.5 flex items-center justify-center gap-2 z-[70] shrink-0">
+          <Terminal className="h-3.5 w-3.5 text-red-500/60" />
+          <span className="text-[10px] text-red-100/60 font-black uppercase tracking-widest">
+            Identity Provider (MetaMask) Missing - High-Fidelity simulation mode active
           </span>
-          <a href="https://metamask.io" target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 underline ml-2">
-            Install MetaMask
+          <a href="https://metamask.io" target="_blank" rel="noreferrer" className="text-[9px] font-black text-blue-500 hover:text-blue-400 uppercase border border-blue-500/20 px-2 py-0.5 rounded ml-4 transition-all hover:bg-blue-500/10">
+            Secure Node
           </a>
         </div>
       )}
 
       {/* 🚀 Header */}
-      <header className="h-9 border-b border-[#2d2d2d] bg-[#2d2d2d] flex items-center px-3 justify-between shrink-0 select-none z-[60]">
-        <div className="flex items-center gap-3">
-           <div className="flex items-center gap-2">
-              <div className="bg-[#007acc] p-0.5 rounded">
-                <Code2 className="size-3.5 text-white" />
+      <header className="h-10 border-b border-white/5 bg-[#1a1a1c]/80 backdrop-blur-xl flex items-center px-4 justify-between shrink-0 select-none z-[60] shadow-sm">
+        <div className="flex items-center gap-4">
+           <div className="flex items-center gap-2.5 group cursor-pointer">
+              <div className="bg-[#007acc] size-5 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform">
+                <Code2 className="size-3 text-white" />
               </div>
-              <span className="text-[11px] font-black tracking-tighter text-white uppercase italic">Crypt<span className="text-[#007acc]">P</span> <span className="opacity-40 font-normal ml-1">IDE</span></span>
+              <span className="text-[12px] font-black tracking-[-0.05em] text-white uppercase italic">Crypt<span className="text-[#007acc]">P</span> <span className="opacity-30 font-light ml-1 lowercase tracking-normal">lab</span></span>
            </div>
-           <div className="h-3 w-[1px] bg-[#444] mx-1"></div>
-           <span className="text-[10px] text-gray-400 font-bold truncate max-w-[200px]">
-             {currentProject?.name || 'Loading...'} <span className="mx-1 opacity-20">•</span> {projects.find(p => p.id === currentProject?.id)?.files?.find((f: ContractFile) => f.id === activeFileId)?.name || 'Untitled.sol'}
-           </span>
+           <div className="h-4 w-px bg-white/5 mx-1"></div>
+           <div className="flex items-center gap-2 group">
+              <span className="text-[10px] text-gray-500 font-bold tracking-tight group-hover:text-blue-400 transition-colors">
+                {currentProject?.name || 'Loading...'}
+              </span>
+              <ChevronLeft className="size-3 text-gray-700 -rotate-90" />
+              <span className="text-[10px] text-gray-400 font-black tracking-tight">
+                {projects.find(p => p.id === currentProject?.id)?.files?.find((f: ContractFile) => f.id === activeFileId)?.name || 'Untitled.sol'}
+              </span>
+           </div>
         </div>
         <div className="flex items-center gap-2">
            {compileResult?.success && (
@@ -623,7 +861,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       <div className="flex-1 flex overflow-hidden">
         
         {/* 🛠️ Standalone Activity Bar */}
-        <aside className="w-12 bg-[#333333] border-r border-[#1e1e1e] flex flex-col items-center py-2 shrink-0 z-50">
+        <aside className="w-14 bg-[#1a1a1c]/95 backdrop-blur-2xl border-r border-white/5 flex flex-col items-center py-4 shrink-0 z-50 gap-4">
           <ActivityIcon active={activeActivity === 'explorer'} onClick={() => { setActiveActivity('explorer'); setShowSideBar(true); }} icon={<FolderTree className="size-5" />} label="Explorer" />
           <ActivityIcon active={activeActivity === 'search'} onClick={() => { setActiveActivity('search'); setShowSideBar(true); }} icon={<Search className="size-5" />} label="Search" />
           <ActivityIcon active={activeActivity === 'factory'} onClick={() => { setActiveActivity('factory'); setShowSideBar(true); }} icon={<Zap className="size-5" />} label="Token Factory" />
@@ -654,18 +892,23 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {activeActivity === 'explorer' && (
-                  <ProjectExplorer 
-                    projects={projects} 
-                    currentProjectId={currentProject?.id}
-                    activeFileId={activeFileId}
-                    onSelectProject={setCurrentProject}
-                    onCreateProject={() => setShowWorkspaceModal(true)} 
-                    onSelectFile={handleSelectFile}
-                    onAddFile={handleAddFile}
-                    onDeleteFile={handleDeleteFile}
-                    onDeleteProject={handleDeleteProject} 
-                  />
-                )}
+                    <ProjectExplorer 
+                      projects={projects} 
+                      currentProjectId={currentProject?.id}
+                      activeFileId={activeFileId}
+                      onSelectProject={setCurrentProject}
+                      onCreateProject={() => setShowWorkspaceModal(true)} 
+                      onSelectFile={handleSelectFile}
+                      onAddFile={handleAddFile}
+                      onAddFolder={handleAddFolder}
+                      onDeleteFolder={handleDeleteFolder}
+                      onImportWorkspace={handleImportWorkspace}
+                      onDeleteFile={handleDeleteFile}
+                      onDeleteProject={handleDeleteProject}
+                      onCompileFolder={handleCompileFolder}
+                      onCompileWorkspace={handleCompileWorkspace}
+                    />
+                  )}
                 {activeActivity === 'factory' && (
                   <TokenFactory 
                     onInjectCode={handleInjectContract} 
@@ -688,7 +931,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                     <p className="text-xs italic">No active deployment.</p>
                   </div>
                 )}
-                {activeActivity === 'analytics' && <AnalyticsSidebar compileResult={compileResult || undefined} sourceCode={code} securityReport={securityReport} />}
+                {activeActivity === 'analytics' && (
+                  <AnalyticsSidebar 
+                    compileResult={compileResult || undefined} 
+                    sourceCode={code} 
+                    securityReport={securityReport} 
+                    isCompiled={hasCompiledInSession}
+                  />
+                )}
                 {activeActivity === 'docs' && <DocsSidebar />}
                 {activeActivity === 'search' && (
                   <TokenSearch 
@@ -751,7 +1001,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                     <button onClick={() => setShowBottomPanel(false)} className="p-2 text-[#858585] hover:text-white"><ChevronLeft className="size-4 rotate-[-90deg]" /></button>
                  </div>
                  <div className="flex-1 overflow-auto custom-scrollbar">
-                    {activeBottomTab === 'output' && compileResult && <div className="p-4"><CompileOutput result={compileResult} code={code} onDeployment={addSimulation} /></div>}
+                    {activeBottomTab === 'output' && compileResult && <div className="p-4"><CompileOutput result={compileResult} code={code} onDeployment={(s) => { addSimulation(s); setActiveCompileDeployment(s); }} deploymentResult={activeCompileDeployment} /></div>}
                     {activeBottomTab === 'security' && <SecurityAudit report={securityReport} isScanning={isScanning} hasCompileError={compileResult?.success === false} />}
                  </div>
               </div>
@@ -827,6 +1077,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           setShowGitHubModal(true);
       }} />}
       {showGitHubModal && <GitHubSyncModal isOpen={showGitHubModal} initialTab={githubModalInitialTab} onClose={() => setShowGitHubModal(false)} userId={userId} currentProject={currentProject} onWorkspaceCreated={(p) => { setProjects([p, ...projects]); setCurrentProject(p); setShowGitHubModal(false); }} />}
+      {showAddFileModal && <AddFileModal onClose={() => { setShowAddFileModal(false); setAddFileContext(null); }} onConfirm={handleConfirmAddFile} folderPath={addFileContext?.parentPath} />}
       {showLinkIdentityModal && <LinkIdentityModal onClose={() => setShowLinkIdentityModal(false)} />}
       
       {showResetConfirm && (
@@ -841,6 +1092,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           </div>
         </div>
       )}
+      <input 
+        id="workspace-import-input"
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={onWorkspaceFolderUpload}
+        {...({ webkitdirectory: '', directory: '' } as any)}
+      />
     </div>
   );
 };

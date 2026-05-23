@@ -56,11 +56,12 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({ report, isScanning, hasCo
     );
   }
 
-  if (!report) {
+  if (!report || report.score === -1) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center p-4">
         <Zap className="h-8 w-8 mb-2 opacity-20" />
-        <p className="text-[10px] uppercase tracking-widest font-bold">Waiting for Compile</p>
+        <p className="text-[10px] uppercase tracking-widest font-bold">Waiting for Meaningful Code</p>
+        <p className="text-[9px] mt-1 opacity-50">Write more logic to trigger a security audit.</p>
       </div>
     );
   }

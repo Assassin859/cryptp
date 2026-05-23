@@ -174,10 +174,33 @@ export const deleteDeployments = async (userId: string, projectId: string) => {
 
 // Files CRUD
 export const createFile = async (userId: string, workspaceId: string, name: string, content: string = '') => {
+  // Check for duplicates
+  const { data: existing } = await supabase
+    .from('files')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .eq('name', name)
+    .maybeSingle();
+
+  if (existing) {
+    throw new Error(`A file or folder with the name "${name}" already exists in this workspace.`);
+  }
 
   const { data, error } = await supabase
     .from('files')
     .insert([{ user_id: userId, workspace_id: workspaceId, name, content }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as ContractFile;
+};
+
+export const renameFile = async (fileId: string, newName: string) => {
+  const { data, error } = await supabase
+    .from('files')
+    .update({ name: newName, updated_at: new Date().toISOString() })
+    .eq('id', fileId)
     .select()
     .single();
 
