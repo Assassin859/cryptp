@@ -3,7 +3,6 @@ import {
   ShieldAlert, 
   Zap, 
   Database, 
-  TrendingUp, 
   DollarSign, 
   Info, 
   ChevronRight,
@@ -11,10 +10,11 @@ import {
   Activity
 } from 'lucide-react';
 import { 
-  ResponsiveContainer, PieChart, Pie, Cell, 
+  ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
-  BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid
+  BarChart, Bar, XAxis, YAxis, Tooltip
 } from 'recharts';
+import { isAbiFunction, asAbiArray } from '../types/abi';
 import { CompilationResult } from '../utils/hardhatCompiler';
 import { SecurityReport } from '../utils/securityScanner';
 import { analyzeStorageLayout } from '../utils/StorageAnalyzer';
@@ -121,19 +121,16 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
 
   const gasData = useMemo(() => {
     if (!compileResult?.abi) return [];
-    return (compileResult.abi as any[])
-      .filter((item: any) => {
-        if (item.type !== 'function') return false;
-        
-        // Filter out system/inherited internal metadata functions
+    const abi = asAbiArray(compileResult.abi);
+    return abi
+      .filter(isAbiFunction)
+      .filter((item) => {
         const name = item.name;
         const isAllCaps = name === name.toUpperCase() && name.includes('_');
         const isMetadata = ['eip712Domain', 'DOMAIN_SEPARATOR', 'CLOCK_MODE', 'clock'].includes(name);
-        const isFree = item.stateMutability === 'view' || item.stateMutability === 'pure';
-        
         return !isAllCaps && !isMetadata;
       })
-      .map((func: any) => {
+      .map((func) => {
         let base = 21000; 
         if (func.stateMutability === 'payable') base = 45000;
         else if (func.stateMutability === 'nonpayable' || !func.stateMutability) base = 25000;
@@ -360,41 +357,140 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
 
             {/* Storage Slot Map */}
             <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-300">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-tighter text-gray-400">
-                <Database className="size-3 text-purple-500" />
-                Storage Slot Map
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-tighter text-gray-400">
+                  <Database className="size-3 text-purple-500" />
+                  Storage Slot Map
+                </div>
+                {storageMap && storageMap.totalSlots > 0 && (
+                  <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                    {storageMap.totalSlots} slot{storageMap.totalSlots !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
-              {storageMap && storageMap.totalSlots > 0 ? (
-                <>
-                  <div className="grid grid-cols-8 gap-1 p-2 bg-[#1e1e1e] rounded border border-[#333]">
-                    {Array.from({ length: Math.min(32, storageMap.totalSlots + 1) }).map((_, i) => {
-                      const isUnpacked = storageMap.unpackedSlots.includes(i);
-                      const isOccupied = i < storageMap.totalSlots;
-                      return (
-                        <div 
-                          key={i} 
-                          className={`aspect-square rounded-sm text-[8px] flex items-center justify-center border transition-all cursor-help
-                            ${isUnpacked ? 'bg-orange-900/40 border-orange-500/50 text-orange-200' : 
-                              isOccupied ? 'bg-purple-900/40 border-purple-500/50 text-purple-200' : 
-                              'bg-gray-800/30 border-gray-700 text-gray-600'}
-                          `}
-                          title={isUnpacked ? `Slot ${i}: Unpacked` : isOccupied ? `Slot ${i}: Occupied` : `Slot ${i}: Empty`}
-                        >
-                          {i}
-                        </div>
-                      );
-                    })}
+
+              {storageMap && storageMap.variables.length > 0 ? (
+                <div className="space-y-1.5">
+                  {/* Legend */}
+                  <div className="flex flex-wrap gap-2 px-1 pb-1">
+                    {[
+                      { label: 'Value', color: 'bg-purple-500' },
+                      { label: 'Mapping', color: 'bg-blue-500' },
+                      { label: 'Array', color: 'bg-cyan-500' },
+                      { label: 'Struct', color: 'bg-orange-500' },
+                      { label: 'String/Bytes', color: 'bg-pink-500' },
+                    ].map(item => (
+                      <div key={item.label} className="flex items-center gap-1">
+                        <div className={`size-1.5 rounded-full ${item.color}`} />
+                        <span className="text-[8px] text-gray-500 font-medium">{item.label}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className={`flex items-start gap-2 border p-2 rounded ${storageMap.unpackedSlots.length > 0 ? 'bg-orange-900/10 border-orange-800/30' : 'bg-blue-900/10 border-blue-800/30'}`}>
-                    <Info className={`size-3 mt-0.5 flex-shrink-0 ${storageMap.unpackedSlots.length > 0 ? 'text-orange-400' : 'text-blue-400'}`} />
-                    <p className={`text-[9px] leading-tight ${storageMap.unpackedSlots.length > 0 ? 'text-orange-300' : 'text-blue-300'}`}>
-                      {storageMap.totalSlots} slots actively used. 
-                      {storageMap.unpackedSlots.length > 0 ? ` ${storageMap.unpackedSlots.length} unpacked slot(s) found. Optimization recommended.` : ' Slot packing is optimal.'}
+
+                  {/* Per-slot rows */}
+                  {(() => {
+                    // Group variables by slot
+                    const slotMap = new Map<number, typeof storageMap.variables>();
+                    storageMap.variables.forEach(v => {
+                      if (!slotMap.has(v.slot)) slotMap.set(v.slot, []);
+                      slotMap.get(v.slot)!.push(v);
+                    });
+
+                    return Array.from(slotMap.entries())
+                      .sort(([a], [b]) => a - b)
+                      .map(([slotIdx, slotVars]) => {
+                        const totalBytes = slotVars.reduce((s, v) => s + Math.min(v.byteSize, 32), 0);
+                        const fillPct = Math.min(100, (totalBytes / 32) * 100);
+                        const isUnpacked = storageMap.unpackedSlots.includes(slotIdx);
+
+                        const catColor = (cat: string) => {
+                          switch (cat) {
+                            case 'mapping': return 'bg-blue-500/20 border-blue-500/40 text-blue-300';
+                            case 'array':   return 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300';
+                            case 'struct':  return 'bg-orange-500/20 border-orange-500/40 text-orange-300';
+                            case 'string':  return 'bg-pink-500/20 border-pink-500/40 text-pink-300';
+                            default:        return 'bg-purple-500/20 border-purple-500/40 text-purple-300';
+                          }
+                        };
+
+                        const barColor = isUnpacked
+                          ? 'bg-orange-500'
+                          : fillPct >= 100
+                            ? 'bg-purple-500'
+                            : 'bg-blue-500';
+
+                        return (
+                          <div
+                            key={slotIdx}
+                            className={`bg-[#1a1a1c] rounded-lg border p-2.5 space-y-2 transition-all hover:border-white/10 ${
+                              isUnpacked ? 'border-orange-500/20' : 'border-white/5'
+                            }`}
+                          >
+                            {/* Slot header */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[8px] font-black text-gray-600 font-mono uppercase">
+                                  Slot {slotIdx}
+                                </span>
+                                <span className="text-[8px] font-mono text-gray-700">
+                                  0x{slotIdx.toString(16).padStart(2, '0')}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[8px] font-bold ${isUnpacked ? 'text-orange-400' : totalBytes >= 32 ? 'text-purple-400' : 'text-gray-500'}`}>
+                                  {totalBytes}/{32}B
+                                </span>
+                                {isUnpacked && (
+                                  <span className="text-[7px] font-black text-orange-400 uppercase tracking-wider border border-orange-500/30 px-1 rounded">
+                                    Pack
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Byte fill bar */}
+                            <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                                style={{ width: `${fillPct}%` }}
+                              />
+                            </div>
+
+                            {/* Variable chips */}
+                            <div className="flex flex-wrap gap-1">
+                              {slotVars.map(v => (
+                                <div
+                                  key={v.name}
+                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[8px] font-bold ${catColor(v.category)}`}
+                                  title={`${v.name}: ${v.type} (${v.byteSize}B @ offset ${v.offset})`}
+                                >
+                                  <span className="font-mono">{v.name}</span>
+                                  <span className="opacity-50">·</span>
+                                  <span className="opacity-70 font-normal truncate max-w-[60px]">{v.type}</span>
+                                  <span className="opacity-40 text-[7px]">{Math.min(v.byteSize, 32)}B</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      });
+                  })()}
+
+                  {/* Summary banner */}
+                  <div className={`flex items-start gap-2 border p-2 rounded mt-2 ${storageMap.unpackedSlots.length > 0 ? 'bg-orange-900/10 border-orange-800/30' : 'bg-green-900/10 border-green-800/20'}`}>
+                    <Info className={`size-3 mt-0.5 flex-shrink-0 ${storageMap.unpackedSlots.length > 0 ? 'text-orange-400' : 'text-green-400'}`} />
+                    <p className={`text-[9px] leading-tight ${storageMap.unpackedSlots.length > 0 ? 'text-orange-300' : 'text-green-300'}`}>
+                      {storageMap.totalSlots} slot{storageMap.totalSlots !== 1 ? 's' : ''} used across {storageMap.variables.length} state variable{storageMap.variables.length !== 1 ? 's' : ''}.{' '}
+                      {storageMap.unpackedSlots.length > 0
+                        ? `${storageMap.unpackedSlots.length} slot(s) have unused space — reorder variables by size to pack tighter.`
+                        : 'Slot packing is optimal.'}
                     </p>
                   </div>
-                </>
+                </div>
               ) : (
-                 <div className="text-center p-4 text-[10px] text-gray-500 border border-[#333] rounded">No state variables mapping found.</div>
+                <div className="text-center p-4 text-[10px] text-gray-500 border border-[#333] rounded">
+                  No state variables found.
+                </div>
               )}
             </section>
           </>

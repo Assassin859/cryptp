@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Github, Download, Upload, RefreshCw, AlertCircle, CheckCircle, Info } from 'lucide-react';
-import { Project, ContractFile, createProject, createFile, updateProject, getFiles } from '../utils/userData';
-import { listUserRepos, createRepository, pushFileToRepo, GitHubRepo, GitHubError } from '../utils/github';
+import { Project, ContractFile, createProject, createFile, updateProject, updateFile, getFiles, getProjects } from '../utils/userData';
+import { listUserRepos, createRepository, pushFileToRepo, getRepoContents, fetchRepoTreeRecursive, fetchBlobContent, GitHubRepo, GitHubError } from '../utils/github';
 
 interface GitHubSyncModalProps {
   isOpen: boolean;
@@ -9,10 +9,11 @@ interface GitHubSyncModalProps {
   userId: string;
   currentProject: Project | null;
   onWorkspaceCreated: (project: Project) => void;
+  onPullComplete?: (updatedFiles: ContractFile[]) => void;
   initialTab?: 'import' | 'export' | 'sync';
 }
 
-export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWorkspaceCreated, initialTab }: GitHubSyncModalProps) {
+export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWorkspaceCreated, onPullComplete, initialTab }: GitHubSyncModalProps) {
   const [activeTab, setActiveTab] = useState<'import' | 'export' | 'sync'>('export');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +122,6 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
       for (const file of filesToSync) {
           let sha;
           try {
-              const { getRepoContents } = await import('../utils/github');
               const existingFile: any = await getRepoContents(currentProject.github_repo, file.name);
               if (existingFile && !Array.isArray(existingFile)) {
                   sha = existingFile.sha;
@@ -149,12 +149,93 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
     }
   };
 
+  const handlePull = async () => {
+    if (!currentProject || !currentProject.github_repo) return;
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
+
+    try {
+      const branch = currentProject.github_branch || 'main';
+      const treeItems = await fetchRepoTreeRecursive(currentProject.github_repo, branch);
+
+      // Filter only .sol files
+      const remoteSolFiles = treeItems.filter(item => item.type === 'blob' && item.path.endsWith('.sol'));
+
+      if (remoteSolFiles.length === 0) {
+        throw new Error('No .sol files found in the remote repository.');
+      }
+
+      // Load current local files
+      const current = await getFiles(currentProject.id);
+      const localByName: Record<string, ContractFile> = {};
+      current.forEach(f => { localByName[f.name] = f; });
+
+      let updated = 0;
+      let created = 0;
+      const resultFiles: ContractFile[] = [...current];
+
+      for (const remoteItem of remoteSolFiles) {
+        const textContent = await fetchBlobContent(remoteItem.url);
+
+        if (localByName[remoteItem.path]) {
+          // Update existing file
+          const updatedFile = await updateFile(localByName[remoteItem.path].id, textContent);
+          const idx = resultFiles.findIndex(f => f.id === updatedFile.id);
+          if (idx !== -1) resultFiles[idx] = updatedFile;
+          updated++;
+        } else {
+          // Create new local file from remote
+          try {
+            const newFile = await createFile(userId, currentProject.id, remoteItem.path, textContent);
+            resultFiles.push(newFile);
+            created++;
+          } catch (e: any) {
+            // Skip if the file somehow already exists (race condition)
+            console.warn('Could not create file during pull:', e.message);
+          }
+        }
+      }
+
+      setSuccess(
+        `Pull complete: ${updated} file(s) updated, ${created} new file(s) added from ${currentProject.github_repo}.`
+      );
+
+      // Refresh local file list in modal
+      const fresh = await getFiles(currentProject.id);
+      setLocalFiles(fresh);
+
+      // Notify parent (IDELayout) so it can reload its editor state
+      if (onPullComplete) {
+        onPullComplete(fresh);
+      }
+
+    } catch (err: any) {
+      setError(err.message || 'Failed to pull from repository.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleImportRepo = async (repo: GitHubRepo) => {
     setIsLoading(true);
     setError(null);
     setSuccess(null);
     try {
-        const { fetchRepoTreeRecursive, fetchBlobContent } = await import('../utils/github');
+        // fetchRepoTreeRecursive and fetchBlobContent are statically imported at the top
+
+        // — Duplicate guard: check if this repo is already imported as a workspace —
+        const existingProjects = await getProjects(userId);
+        const duplicate = existingProjects.find(
+          (p) => (p as any).github_repo === repo.full_name
+        );
+        if (duplicate) {
+          throw new Error(
+            `"${repo.name}" is already imported as workspace "${duplicate.name}". ` +
+            `Use the Sync tab to push changes to it instead of importing again.`
+          );
+        }
+
         const treeItems = await fetchRepoTreeRecursive(repo.full_name, repo.default_branch);
         
         // Filter for any Solidity files recursively
@@ -238,6 +319,7 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
           <div className="flex gap-2 mb-6">
             <button
               onClick={() => setActiveTab('import')}
+              data-testid="github-tab-import"
               className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 activeTab === 'import' ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
               }`}
@@ -246,6 +328,7 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
             </button>
             <button
               onClick={() => setActiveTab('export')}
+              data-testid="github-tab-export"
               disabled={!!currentProject?.github_repo}
               className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 activeTab === 'export' ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white disabled:opacity-50'
@@ -255,6 +338,7 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
             </button>
             <button
               onClick={() => setActiveTab('sync')}
+              data-testid="github-tab-sync"
               disabled={!currentProject?.github_repo}
               className={`flex-1 flex justify-center items-center gap-1.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 activeTab === 'sync' ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white disabled:opacity-50'
@@ -330,7 +414,7 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
 
               <div className="bg-[#121214] border border-gray-800 rounded-lg p-3 text-xs text-gray-400 flex items-start gap-2">
                  <Info className="w-4 h-4 text-orange-400 shrink-0" />
-                 <p>Pushing will overwrite remote files that match local file names. Note: Recursive folder paths are properly maintained!</p>
+                 <p>Push sends your local changes to GitHub. Pull fetches remote changes into your workspace.</p>
               </div>
 
               <div>
@@ -361,14 +445,26 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
                  </div>
               </div>
 
-              <button
-                onClick={handleSync}
-                disabled={isLoading || localFiles.filter(f => selectedSyncFiles[f.id]).length === 0}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-colors mt-2"
-              >
-                {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                Commit & Push Changes
-              </button>
+              <div className="flex gap-2 mt-2">
+                <button
+                  data-testid="github-push-btn"
+                  onClick={handleSync}
+                  disabled={isLoading || localFiles.filter(f => selectedSyncFiles[f.id]).length === 0}
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-colors text-sm"
+                >
+                  {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  Push
+                </button>
+                <button
+                  data-testid="github-pull-btn"
+                  onClick={handlePull}
+                  disabled={isLoading}
+                  className="flex-1 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-colors text-sm"
+                >
+                  {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  Pull
+                </button>
+              </div>
             </div>
           )}
 

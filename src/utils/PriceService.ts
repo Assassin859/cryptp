@@ -58,7 +58,7 @@ class PriceService {
               break; // Success
             }
           }
-        } catch (e) {
+        } catch {
           continue; // Try next RPC
         }
       }

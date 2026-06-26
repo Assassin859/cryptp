@@ -8,7 +8,6 @@ import {
   ShieldCheck, 
   Award,
   ChevronRight,
-  Info,
   FileText
 } from 'lucide-react';
 import { allTemplates } from '../utils/contractTemplates';

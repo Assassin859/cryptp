@@ -112,10 +112,10 @@ const RULES = {
   },
   CENTRALIZED_RISK: {
     id: 'S013',
-    title: 'Centralized Risk (onlyOwner)',
-    description: 'Critical functions are protected by onlyOwner but lacks a Timelock or MultiSig governance.',
+    title: 'High Centralization Risk',
+    description: 'Multiple critical functions are gated by onlyOwner with no evidence of a Timelock or MultiSig pattern. This creates a single point of failure — a compromised owner key can drain or destroy the protocol.',
     severity: 'Medium' as Severity,
-    recommendation: 'Transition to a Decentralized Governance (DAO) or implement a 24-48h Timelock.'
+    recommendation: 'Add a TimelockController (OpenZeppelin) with a 24-48h delay, or use a Gnosis Safe MultiSig for admin operations. Consider transitioning to a DAO governance model.'
   },
   DELEGATECALL_UNTRUSTED: {
     id: 'SWC-112',
@@ -156,6 +156,7 @@ export const scanContract = (sourceCode: string): SecurityReport => {
   let solidityVersion = '0.8.0';
   let canReceiveEther = false;
   let canWithdrawEther = false;
+  let onlyOwnerCount = 0;
   
   try {
     let hasContract = false;
@@ -211,18 +212,35 @@ export const scanContract = (sourceCode: string): SecurityReport => {
            }
         }
         if (node.expression.type === 'MemberAccess' && node.expression.memberName === 'delegatecall') {
-           findings.push({ ...RULES.DELEGATECALL_UNTRUSTED, range: node.loc });
+           const target = node.expression.expression;
+           const isStaticTarget =
+             target?.type === 'Identifier' &&
+             (target.name === 'target' || target.name === 'implementation' || target.name === 'logic');
+           if (!isStaticTarget) {
+             findings.push({ ...RULES.DELEGATECALL_UNTRUSTED, range: node.loc });
+           }
         }
       },
 
-      // 5. Unbounded loops & Variable Shadowing
+      // 5. Unbounded loops — only flag loops over STORAGE arrays, not function params
       ForStatement: (node: any) => {
-        if (node.condition && 
-            node.condition.type === 'BinaryOperation' && 
-            node.condition.right &&
-            node.condition.right.type === 'MemberAccess' &&
-            node.condition.right.memberName === 'length') {
-          findings.push({ ...RULES.UNBOUNDED_LOOP, range: node.loc });
+        if (
+          node.condition &&
+          node.condition.type === 'BinaryOperation' &&
+          node.condition.right?.type === 'MemberAccess' &&
+          node.condition.right.memberName === 'length'
+        ) {
+          // Resolve the array name from the expression being iterated
+          const arrayExpr = node.condition.right.expression;
+          const arrayName =
+            arrayExpr?.type === 'Identifier' ? arrayExpr.name :
+            arrayExpr?.type === 'MemberAccess' ? arrayExpr.memberName : null;
+
+          // Only flag if the array is a known contract-level state variable.
+          // Looping over calldata/memory params (e.g. _recipients) is generally safe.
+          if (arrayName && stateVariables.includes(arrayName)) {
+            findings.push({ ...RULES.UNBOUNDED_LOOP, range: node.loc });
+          }
         }
       },
 
@@ -250,11 +268,12 @@ export const scanContract = (sourceCode: string): SecurityReport => {
           canWithdrawEther = true;
         }
 
-        // Checking Centralized Risk
+        // Accumulate onlyOwner usage — fire once at contract level, not per-function.
+        // 1-2 onlyOwner functions is idiomatic OZ; 3+ signals genuine centralization risk.
         if (node.modifiers) {
           node.modifiers.forEach((mod: any) => {
             if (mod.name === 'onlyOwner') {
-               findings.push({ ...RULES.CENTRALIZED_RISK, range: mod.loc });
+              onlyOwnerCount++;
             }
           });
         }
@@ -291,11 +310,26 @@ export const scanContract = (sourceCode: string): SecurityReport => {
             hasEventEmitted = true;
           },
           ExpressionStatement: (exprNode: any) => {
+            if (
+              exprNode.expression?.type === 'FunctionCall' &&
+              exprNode.expression.expression?.type === 'MemberAccess' &&
+              ['call', 'send'].includes(exprNode.expression.expression.memberName)
+            ) {
+              findings.push({ ...RULES.UNCHECKED_RET_VAL, range: exprNode.loc || undefined });
+            }
+
             if (exprNode.expression && 
                 (exprNode.expression.type === 'BinaryOperation' || exprNode.expression.type === 'Assignment') && 
                 ['=', '+=', '-=', '*=', '/='].includes(exprNode.expression.operator)) {
               
-              stateChanged = true;
+              // Only count as state change if the left-hand side looks like a state variable
+              // (Identifier or MemberAccess) — not a local variable declaration.
+              const lhs = exprNode.expression.left;
+              const isStateWrite =
+                (lhs?.type === 'Identifier' && stateVariables.includes(lhs.name)) ||
+                (lhs?.type === 'MemberAccess');
+
+              if (isStateWrite) stateChanged = true;
 
               if (hasExternalCall) {
                 // Potential Reentrancy!
@@ -316,8 +350,10 @@ export const scanContract = (sourceCode: string): SecurityReport => {
           }
         });
 
-        // Final function wide checks
-        if (!node.isConstructor && stateChanged && !hasEventEmitted) {
+        // Final function-wide checks:
+        // Skip constructors, view functions, and pure functions — they are not expected to emit events.
+        const isReadOnly = node.stateMutability === 'view' || node.stateMutability === 'pure';
+        if (!node.isConstructor && !isReadOnly && stateChanged && !hasEventEmitted) {
            findings.push({ ...RULES.MISSING_EVENTS, range: node.loc });
         }
       },
@@ -327,6 +363,14 @@ export const scanContract = (sourceCode: string): SecurityReport => {
       }
 
     });
+
+    // Fire centralization risk once if 3+ functions are owner-gated
+    if (onlyOwnerCount >= 3) {
+      findings.push({
+        ...RULES.CENTRALIZED_RISK,
+        description: `${onlyOwnerCount} functions are gated by onlyOwner with no evidence of a Timelock or MultiSig governance pattern. This creates a single point of failure — a compromised owner key can drain or destroy the protocol.`,
+      });
+    }
 
     if (canReceiveEther && !canWithdrawEther) {
        findings.push({ ...RULES.LOCKED_ETHER });

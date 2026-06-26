@@ -1,31 +1,45 @@
 import React, { useState, useEffect } from 'react';
+import { DEFAULT_GAS_LIMIT, MIN_GAS_LIMIT, MAX_GAS_LIMIT } from '../constants/gas';
 import { Play, Search, Zap, Activity, AlertCircle, Info, User, RefreshCw, ChevronDown, ChevronUp, Fuel, List, Terminal, Sparkles } from 'lucide-react';
 
 import { Interface, Result, Contract, parseEther, formatUnits, parseUnits } from 'ethers';
-import { EventLog, GasReport } from '../utils/browserVM';
+import { browserVM, EventLog, GasReport } from '../utils/browserVM';
 import { useWeb3 } from '../context/Web3Context';
+import { isAbiFunction, asAbiArray, type AbiFragment } from '../types/abi';
+import { getErrorMessage } from '../utils/errorMessage';
+import type { SaveDeploymentPayload } from '../utils/userData';
 
 
 interface ContractInteractionProps {
-  abi: any[];
+  abi: unknown[];
   address: string;
   network: string;
+  canInteract?: boolean;
   onRefreshSimulations?: () => void;
-  onTransactionExecuted?: (txHash: string) => void;
+  onTransactionExecuted?: (payload: {
+    txHash: string;
+    callData: string;
+    contractAddress: string;
+    gasUsed: number;
+    callValueWei?: string;
+    gasLimit?: number;
+  }) => void;
   onQueryAI?: (prompt: string) => void;
 }
 
 const ContractInteraction: React.FC<ContractInteractionProps> = ({ 
   abi, 
   address, 
-  network, 
+  network,
+  canInteract = true,
   onRefreshSimulations, 
   onTransactionExecuted,
   onQueryAI
 }) => {
   const { signer, isConnected } = useWeb3();
-  const [readFunctions, setReadFunctions] = useState<any[]>([]);
-  const [writeFunctions, setWriteFunctions] = useState<any[]>([]);
+  type CallableAbi = AbiFragment & { type: 'function'; name: string; stateMutability?: string; inputs?: { name?: string; type: string }[] };
+  const [readFunctions, setReadFunctions] = useState<CallableAbi[]>([]);
+  const [writeFunctions, setWriteFunctions] = useState<CallableAbi[]>([]);
   const [expandedFunctions, setExpandedFunctions] = useState<{ [key: string]: boolean }>({});
   const [inputs, setInputs] = useState<{ [key: string]: { [argName: string]: string } }>({});
   const [inputUnits, setInputUnits] = useState<{ [key: string]: { [argName: string]: 'wei' | 'gwei' | 'ether' } }>({});
@@ -33,8 +47,8 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
   const [activeAccountIndex, setActiveAccountIndex] = useState<number>(0);
   const [results, setResults] = useState<{ 
     [key: string]: { 
-      output?: any; 
-      rawValue?: any;
+      output?: string; 
+      rawValue?: unknown;
       error?: string; 
       loading?: boolean; 
       txHash?: string;
@@ -44,20 +58,19 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
     } 
   }>({});
   const [showGasDetail, setShowGasDetail] = useState<{ [key: string]: boolean }>({});
+  const [txGasLimit, setTxGasLimit] = useState<string>(String(DEFAULT_GAS_LIMIT));
 
 
   useEffect(() => {
     if (!abi) return;
 
-    const read = abi.filter(item => 
-      item.type === 'function' && 
-      (item.stateMutability === 'view' || item.stateMutability === 'pure')
-    );
-    const write = abi.filter(item => 
-      item.type === 'function' && 
-      item.stateMutability !== 'view' && 
-      item.stateMutability !== 'pure'
-    );
+    const abiList = asAbiArray(abi);
+    const read = abiList.filter(isAbiFunction).filter(
+      (item) => item.stateMutability === 'view' || item.stateMutability === 'pure'
+    ) as CallableAbi[];
+    const write = abiList.filter(isAbiFunction).filter(
+      (item) => item.stateMutability !== 'view' && item.stateMutability !== 'pure'
+    ) as CallableAbi[];
 
     setReadFunctions(read);
     setWriteFunctions(write);
@@ -69,16 +82,13 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
     setExpandedFunctions(initialExpanded);
 
     if (network === 'Local Simulation') {
-        import('../utils/browserVM').then(({ browserVM }) => {
-            setAccounts(browserVM.getAccounts());
-        });
+        setAccounts(browserVM.getAccounts());
     }
   }, [abi, network]);
 
   const handleAccountChange = async (index: number) => {
       setActiveAccountIndex(index);
       if (network === 'Local Simulation') {
-          const { browserVM } = await import('../utils/browserVM');
           browserVM.setActiveAccount(index);
       }
   };
@@ -101,30 +111,50 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
     }));
   };
 
-  const executeFunction = async (func: any, isRead: boolean) => {
+  const clampGasLimit = (raw: string): number => {
+    const parsed = parseInt(raw, 10);
+    if (isNaN(parsed) || parsed < MIN_GAS_LIMIT) return DEFAULT_GAS_LIMIT;
+    return Math.min(parsed, MAX_GAS_LIMIT);
+  };
+
+  const executeFunction = async (func: CallableAbi, isRead: boolean) => {
     const funcName = func.name;
+    const funcInputs = func.inputs ?? [];
+
+    if (!canInteract && network === 'Local Simulation') {
+      setResults(prev => ({
+        ...prev,
+        [funcName]: {
+          error: 'Source changed since last compile. Recompile before interacting.',
+          loading: false,
+        },
+      }));
+      return;
+    }
+
     setResults(prev => ({ ...prev, [funcName]: { loading: true } }));
 
     try {
-      const iface = new Interface(abi);
-      const argValues = func.inputs.map((input: any) => inputs[funcName]?.[input.name] || '');
-      
-      // Basic type conversion
-      const processedArgs = func.inputs.map((input: any, index: number) => {
-        const val = argValues[index];
-        if (!val) {
-           if (input.type.includes('uint') || input.type.includes('int')) return 0n;
-           if (input.type === 'bool') return false;
-           return '';
+      const iface = new Interface(asAbiArray(abi));
+      const argValues = funcInputs.map((input) => inputs[funcName]?.[input.name ?? ''] || '');
+
+      for (const input of funcInputs) {
+        const val = inputs[funcName]?.[input.name ?? ''];
+        if (val === undefined || val.trim() === '') {
+          throw new Error(`Missing required argument: ${input.name || input.type}`);
         }
+      }
+      
+      const processedArgs = funcInputs.map((input, index: number) => {
+        const val = argValues[index];
 
         if (input.type.includes('uint') || input.type.includes('int')) {
-          const unit = inputUnits[funcName]?.[input.name] || 'wei';
+          const unit = inputUnits[funcName]?.[input.name ?? ''] || 'wei';
           try {
             if (unit === 'ether') return parseUnits(val, 18);
             if (unit === 'gwei') return parseUnits(val, 9);
             return BigInt(val);
-          } catch (e) {
+          } catch {
             return BigInt(0);
           }
         }
@@ -132,11 +162,10 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           return val.toLowerCase() === 'true';
         }
 
-        // Complex types: arrays, structs, bytes
         if (input.type.includes('[]') || input.type.startsWith('bytes') || input.type.includes('tuple')) {
            try {
               return JSON.parse(val);
-           } catch(e) {
+           } catch {
               return val;
            }
         }
@@ -147,7 +176,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
       const data = iface.encodeFunctionData(funcName, processedArgs);
 
       if (network === 'Local Simulation') {
-        const { browserVM } = await import('../utils/browserVM');
+        // browserVM is statically imported at the top
         
         if (isRead) {
           const { returnValue, gasUsed } = await browserVM.runCall(address, data);
@@ -172,13 +201,23 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         } else {
           const ethValue = inputs[funcName]?._value || '0';
           const weiValue = parseEther(ethValue || '0');
-          const { transactionHash, gasReport, logs } = await browserVM.sendTransaction(address, data, weiValue);
+          const safeGasLimit = clampGasLimit(txGasLimit);
+          const { transactionHash, gasReport, logs } = await browserVM.sendTransaction(address, data, weiValue, safeGasLimit);
           setResults(prev => ({ 
             ...prev, 
             [funcName]: { txHash: transactionHash, gasReport, logs, loading: false } 
           }));
           if (onRefreshSimulations) onRefreshSimulations();
-          if (onTransactionExecuted) onTransactionExecuted(transactionHash);
+          if (onTransactionExecuted) {
+            onTransactionExecuted({
+              txHash: transactionHash,
+              callData: data,
+              contractAddress: address,
+              gasUsed: gasReport.total,
+              callValueWei: weiValue.toString(),
+              gasLimit: safeGasLimit,
+            });
+          }
         }
 
       } else {
@@ -187,14 +226,14 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           throw new Error('Please connect your wallet to interact with this contract on a real network.');
         }
 
-        const contract = new Contract(address, abi, signer);
+        const contract = new Contract(address, asAbiArray(abi), signer);
         
         if (isRead) {
           const result = await contract[funcName](...processedArgs);
           setResults(prev => ({ 
             ...prev, 
             [funcName]: { 
-              output: formatOutput([result] as any, prev[funcName]?.unit || 'wei'), 
+              output: formatOutput([result] as Result, prev[funcName]?.unit || 'wei'), 
               rawValue: result,
               unit: prev[funcName]?.unit || 'wei',
               loading: false 
@@ -220,11 +259,11 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           }));
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Execution Error:', err);
       setResults(prev => ({ 
         ...prev, 
-        [funcName]: { error: err.message, loading: false } 
+        [funcName]: { error: getErrorMessage(err), loading: false } 
       }));
     }
   };
@@ -256,13 +295,14 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         [funcName]: {
           ...res,
           unit,
-          output: formatOutput(Array.isArray(res.rawValue) ? res.rawValue as any : [res.rawValue] as any, unit)
+          output: formatOutput((Array.isArray(res.rawValue) ? res.rawValue : [res.rawValue]) as Result, unit)
         }
       };
     });
   };
 
-  const renderFunction = (func: any, isRead: boolean) => {
+  const renderFunction = (func: CallableAbi, isRead: boolean) => {
+    const funcInputs = func.inputs ?? [];
     const isExpanded = expandedFunctions[func.name];
     const result = results[func.name];
 
@@ -281,10 +321,10 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
 
         {isExpanded && (
           <div className="px-4 pb-4 border-t border-gray-700/50 pt-3 space-y-3">
-            {func.inputs.length > 0 && (
+            {funcInputs.length > 0 && (
               <div className="space-y-2">
-                {func.inputs.map((input: any) => (
-                  <div key={input.name} className="flex flex-col gap-1">
+                {funcInputs.map((input) => (
+                  <div key={input.name ?? input.type} className="flex flex-col gap-1">
                     <div className="flex items-center justify-between ml-1">
                       <label className="text-[10px] text-gray-400 font-mono">
                         {input.name} ({input.type})
@@ -294,9 +334,9 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                           {['wei', 'gwei', 'ether'].map((u) => (
                             <button
                               key={u}
-                              onClick={() => handleInputUnitChange(func.name, input.name, u as any)}
+                              onClick={() => handleInputUnitChange(func.name, input.name ?? '', u as 'wei' | 'gwei' | 'ether')}
                               className={`text-[7px] px-1 rounded border uppercase font-bold transition-colors ${
-                                (inputUnits[func.name]?.[input.name] || 'wei') === u 
+                                (inputUnits[func.name]?.[input.name ?? ''] || 'wei') === u 
                                   ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
                                   : 'bg-gray-950 border-gray-800 text-gray-600 hover:text-gray-400'
                               }`}
@@ -310,8 +350,8 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                     <input
                       type="text"
                       placeholder={input.type}
-                      value={inputs[func.name]?.[input.name] || ''}
-                      onChange={(e) => handleInputChange(func.name, input.name, e.target.value)}
+                      value={inputs[func.name]?.[input.name ?? ''] || ''}
+                      onChange={(e) => handleInputChange(func.name, input.name ?? '', e.target.value)}
                       className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500 font-mono"
                     />
                   </div>
@@ -374,7 +414,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                             {['wei', 'gwei', 'ether'].map((u) => (
                               <button
                                 key={u}
-                                onClick={() => handleUnitChange(func.name, u as any)}
+                                onClick={() => handleUnitChange(func.name, u as 'wei' | 'gwei' | 'ether')}
                                 className={`text-[8px] px-1 rounded border uppercase font-bold transition-colors ${
                                   result.unit === u 
                                     ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
@@ -459,11 +499,11 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                     </div>
                     <div className="max-h-40 overflow-y-auto p-2 space-y-2">
                       {result.logs.map((log, idx) => {
-                        const iface = new Interface(abi);
+                        const iface = new Interface(asAbiArray(abi));
                         let parsed = null;
                         try {
                           parsed = iface.parseLog({ topics: log.topics, data: log.data });
-                        } catch (e) {}
+                        } catch { /* log may not match ABI */ }
 
                         return (
                           <div key={idx} className="bg-gray-950 p-2 rounded border border-gray-800 font-mono text-[10px]">
@@ -516,7 +556,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
       <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-green-400" />
-          <h3 className="text-sm font-semibold text-white">Contract Interaction</h3>
+          <h3 data-testid="interact-heading" className="text-sm font-semibold text-white">Contract Interaction</h3>
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
           {network !== 'Local Simulation' && (
@@ -541,6 +581,36 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
               <span className="text-xs font-mono text-blue-400 select-all">{address}</span>
             </div>
           </div>
+
+          {/* Gas Limit for write transactions */}
+          {network === 'Local Simulation' && (
+            <div className="space-y-1">
+              <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                <Fuel className="h-3 w-3" />
+                Tx Gas Limit
+              </h4>
+              <div className="flex items-center gap-2">
+                <input
+                  id="tx-gas-limit"
+                  type="number"
+                  min={MIN_GAS_LIMIT}
+                  max={MAX_GAS_LIMIT}
+                  step={500000}
+                  value={txGasLimit}
+                  onChange={(e) => setTxGasLimit(e.target.value)}
+                  className="flex-1 bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTxGasLimit(String(DEFAULT_GAS_LIMIT))}
+                  className="text-[9px] px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded whitespace-nowrap transition-colors"
+                >
+                  Reset
+                </button>
+              </div>
+              <p className="text-[9px] text-gray-600">Uniswap V3 Factory ~4.5M · ERC-20 ~1.5M</p>
+            </div>
+          )}
           
           {network === 'Local Simulation' && accounts.length > 0 && (
               <div className="space-y-2">
@@ -561,7 +631,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           )}
         </div>
 
-        <section>
+        <section data-testid="interact-read-section">
           <h4 className="text-[11px] font-bold text-blue-500 uppercase tracking-wider flex items-center gap-2 mb-3">
             <Search className="h-3 w-3" />
             Read Functions (Constant)
@@ -573,7 +643,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           )}
         </section>
 
-        <section>
+        <section data-testid="interact-write-section">
           <h4 className="text-[11px] font-bold text-purple-500 uppercase tracking-wider flex items-center gap-2 mb-3">
             <Activity className="h-3 w-3" />
             Write Functions (State-changing)

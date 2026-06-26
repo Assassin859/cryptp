@@ -17,7 +17,7 @@ const WalletConnect: React.FC = () => {
 
   const TESTNET_FAUCETS: { [key: number]: string } = {
     11155111: 'https://faucets.chain.link/sepolia',
-    80001: 'https://faucet.polygon.technology/'
+    80002: 'https://faucet.polygon.technology/'
   };
 
   const handleSwitchNetwork = async (targetChainId: number) => {

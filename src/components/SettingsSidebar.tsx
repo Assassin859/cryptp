@@ -3,6 +3,7 @@ import { Settings, LogOut, Github, Chrome, Mail, User as UserIcon, Loader2, Key,
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabaseClient';
 import { getProjects, migrateWorkspacesToFiles, deleteProject } from '../utils/userData';
+import ConfirmModal from './ConfirmModal';
 
 interface SettingsSidebarProps {
   user: User | null;
@@ -15,6 +16,12 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
 
   const [aiKeys, setAiKeys] = useState<Record<string, string>>({});
   const [rpcKeys, setRpcKeys] = useState<Record<string, string>>({});
+
+  // Local confirm modal (replaces window.confirm)
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string; message: string; confirmLabel?: string;
+    isDangerous?: boolean; onConfirm: () => void;
+  } | null>(null);
 
   // Scoped key helper
   const getScopedKey = (base: string) => user ? `${base}-${user.id}` : base;
@@ -79,18 +86,23 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
      }
   };
 
-  const deleteKeysFromCloud = async () => {
+  const deleteKeysFromCloud = () => {
      if (!user) return;
-     if (!confirm("Are you sure you want to permanently delete your API keys from the cloud and device?")) return;
-     
-     setRpcKeys({});
-     setAiKeys({});
-     localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
-     localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
-     
-     try {
-       await supabase.from('user_settings').delete().eq('user_id', user.id);
-     } catch(e) {}
+     setConfirmModal({
+       title: 'Delete API Keys',
+       message: 'Permanently delete your API keys from the cloud and this device? You will need to re-enter them to use AI features.',
+       confirmLabel: 'Delete Keys',
+       isDangerous: true,
+       onConfirm: async () => {
+         setRpcKeys({});
+         setAiKeys({});
+         localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
+         localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
+         try {
+           await supabase.from('user_settings').delete().eq('user_id', user.id);
+         } catch { /* cloud row may not exist */ }
+       }
+     });
   };
 
   const handleDownloadWorkspace = async () => {
@@ -113,29 +125,30 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
     }
   };
 
-  const handleEraseAccount = async () => {
+  const handleEraseAccount = () => {
     if (!user) return;
-    if (!confirm("WARNING: This will permanently delete your workspaces, files, settings, and API keys. This CANNOT be undone. Proceed?")) return;
-    try {
-      // 1. Delete Settings
-      await supabase.from('user_settings').delete().eq('user_id', user.id);
-      
-      // 2. Delete Projects (Files will cascade delete in DB if set up, or handled by deleteProject)
-      const allProjects = await getProjects(user.id);
-      for (const p of allProjects) {
-        await deleteProject(p.id);
+    setConfirmModal({
+      title: 'Erase Account Data',
+      message:
+        'This will permanently delete ALL your workspaces, files, settings, and API keys.\n\n' +
+        'This action CANNOT be undone. Are you absolutely sure?',
+      confirmLabel: 'Erase Everything',
+      isDangerous: true,
+      onConfirm: async () => {
+        try {
+          await supabase.from('user_settings').delete().eq('user_id', user.id);
+          const allProjects = await getProjects(user.id);
+          for (const p of allProjects) {
+            await deleteProject(p.id);
+          }
+          localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
+          localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
+          onSignOut();
+        } catch(e: any) {
+          console.error("Failed to erase data:", e);
+        }
       }
-
-      // 3. Purge Local Storage
-      localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
-      localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
-
-      // 4. Force Sign Out
-      alert("All data has been erased. Signing out.");
-      onSignOut();
-    } catch(e: any) {
-      alert("Failed to erase data: " + e.message);
-    }
+    });
   };
 
   if (!user) {
@@ -200,6 +213,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
   };
 
   return (
+    <>
     <div className="flex flex-col h-full bg-gray-950/20 font-sans">
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 bg-gray-950/30 shrink-0">
         <div className="flex items-center gap-2">
@@ -340,7 +354,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
                <Bot className="size-3" /> Advanced AI Integration
              </h3>
              <div className="absolute left-1 bottom-full mb-1 hidden group-hover:block w-[95%] bg-[#1e102f] text-purple-200 text-[10px] p-2.5 rounded-lg border border-purple-500/30 shadow-2xl z-50 animate-in fade-in zoom-in-95">
-               Bring your own API keys to supercharge the AI Chat. Your keys never leave your browser, ensuring maximum privacy while letting the Assistant audit and optimize your code.
+               Bring your own API keys for AI and RPC providers. Keys are stored in scoped browser localStorage and may sync to your Supabase account if you use cloud save — never commit keys to git.
              </div>
            </div>
            <p className="text-[9px] text-gray-500 mb-3 pl-1 leading-tight">Bring your own keys to unlock localized AI features like contract auditing and auto-completion without backend proxies.</p>
@@ -408,6 +422,19 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
       </div>
 
     </div>
+
+      {/* ✅ Confirm Modal (replaces window.confirm in Settings) */}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          isDangerous={confirmModal.isDangerous}
+          onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(null); }}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
+    </>
   );
 };
 

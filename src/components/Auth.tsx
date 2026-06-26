@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
+import { getErrorMessage } from '../utils/errorMessage';
 
 interface AuthProps {
   onSignedIn: (userId: string) => void;
@@ -58,8 +59,8 @@ const Auth: React.FC<AuthProps> = ({ onSignedIn }) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-    } catch (err: any) {
-      setAuthError(err.message || 'Authentication failed');
+    } catch (err: unknown) {
+      setAuthError(getErrorMessage(err) || 'Authentication failed');
     } finally {
       setLoading(false);
     }

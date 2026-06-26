@@ -5,8 +5,6 @@
  */
 
 let compileStandard: any = null;
-let currentVersion: string = '0.8.20';
-
 const DEFAULT_SOLJSON = 'https://binaries.soliditylang.org/bin/soljson-v0.8.20+commit.a1b79de6.js';
 
 const setupSolcSafe = (mod: any) => {
@@ -135,15 +133,21 @@ const loadCompiler = async (url: string = DEFAULT_SOLJSON): Promise<void> => {
 };
 
 self.onmessage = async (event) => {
-  const { type, versionUrl, sourceCode, contractName, projectFiles, activeFileName = 'contract.sol' } = event.data;
-  
+  const { type, requestId, versionUrl, sourceCode, contractName, projectFiles, activeFileName = 'contract.sol' } = event.data;
+  const reply = (payload: Record<string, unknown>) =>
+    self.postMessage({ ...payload, requestId });
+
   if (type === 'LOAD_VERSION') {
     try {
       await loadCompiler(versionUrl);
-      self.postMessage({ success: true, type: 'VERSION_LOADED', version: versionUrl });
+      reply({ success: true, type: 'VERSION_LOADED', version: versionUrl });
     } catch (err: any) {
-      self.postMessage({ success: false, type: 'VERSION_LOAD_FAILED', error: err.message });
+      reply({ success: false, type: 'VERSION_LOAD_FAILED', error: err.message });
     }
+    return;
+  }
+
+  if (type !== 'COMPILE') {
     return;
   }
 
@@ -155,7 +159,7 @@ self.onmessage = async (event) => {
     const sources: Record<string, { content: string }> = {
       [activeFileName]: { content: sourceCode }
     };
-    
+
     if (projectFiles) {
        projectFiles.forEach((f: any) => {
           sources[f.name] = { content: f.content };
@@ -175,15 +179,13 @@ self.onmessage = async (event) => {
       }
     };
 
-    // We pass our JSON directly. Import callbacks via standard JSON are not strictly supported by the bare `solidity_compile(input, 0)`.
-    // Remote imports should be flattened prior to compilation by hardhatCompiler.
     const outputString = compileStandard(JSON.stringify(input));
     const output = JSON.parse(outputString);
 
     if (output.errors) {
        const errors = output.errors.map((e: any) => {
           let lineNum = e.sourceLocation?.start;
-          
+
           if (e.sourceLocation && e.sourceLocation.file && e.sourceLocation.start !== -1 && e.sourceLocation.start !== undefined) {
              const fileContent = sources[e.sourceLocation.file]?.content;
              if (fileContent) {
@@ -202,18 +204,18 @@ self.onmessage = async (event) => {
             }
           };
        });
-       
+
        if (errors.some((e: any) => e.type === 'error')) {
-          self.postMessage({ success: false, errors });
+          reply({ type: 'COMPILE_RESULT', success: false, errors });
           return;
        }
     }
 
     const contractFiles = Object.keys(output.contracts || {});
     const mainFile = contractFiles.find(f => Object.keys(output.contracts[f]).includes(contractName)) || contractFiles[0];
-    
+
     if (!mainFile || !output.contracts[mainFile]) {
-       self.postMessage({ success: false, errors: [{ type: 'error', message: `Contract ${contractName} not found after compilation.` }] });
+       reply({ type: 'COMPILE_RESULT', success: false, errors: [{ type: 'error', message: `Contract ${contractName} not found after compilation.` }] });
        return;
     }
 
@@ -221,11 +223,12 @@ self.onmessage = async (event) => {
     const contract = contractResult[contractName] || Object.values(contractResult)[0];
 
     if (!contract) {
-       self.postMessage({ success: false, errors: [{ type: 'error', message: `Contract ${contractName} not found in output.` }] });
+       reply({ type: 'COMPILE_RESULT', success: false, errors: [{ type: 'error', message: `Contract ${contractName} not found in output.` }] });
        return;
     }
 
-    self.postMessage({
+    reply({
+      type: 'COMPILE_RESULT',
       success: true,
       abi: contract.abi,
       bytecode: contract.evm.bytecode.object,
@@ -234,6 +237,6 @@ self.onmessage = async (event) => {
     });
 
   } catch (err: any) {
-    self.postMessage({ success: false, errors: [{ type: 'error', message: err.message }] });
+    reply({ type: 'COMPILE_RESULT', success: false, errors: [{ type: 'error', message: err.message }] });
   }
 };

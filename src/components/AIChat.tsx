@@ -14,6 +14,20 @@ import remarkGfm from 'remark-gfm';
 
 import { User } from '@supabase/supabase-js';
 import { Project } from '../utils/userData';
+import { SecurityReport } from '../utils/securityScanner';
+import { CompilationResult, CompilationError } from '../utils/hardhatCompiler';
+import { getErrorMessage } from '../utils/errorMessage';
+
+interface AiKeys {
+  openai?: string;
+  gemini?: string;
+  claude?: string;
+}
+
+interface ModelOption {
+  id: string;
+  name: string;
+}
 
 interface Message {
   role: 'user' | 'assistant';
@@ -30,8 +44,8 @@ interface AIChatProps {
   onCreateFile?: (name: string, content: string) => void;
   onCompile?: () => void;
   onDeploy?: () => void;
-  compileResult?: any;
-  securityReport?: any;
+  compileResult?: CompilationResult | null;
+  securityReport?: SecurityReport | null;
   initialPrompt?: { prompt: string, theme: string } | null;
   onPromptConsumed?: () => void;
 }
@@ -86,18 +100,19 @@ const AIChat: React.FC<AIChatProps> = ({
   }, [initialPrompt]);
 
   // Read keys to determine available models
-  let aiKeys: any = {};
+  let aiKeys: AiKeys = {};
   if (typeof window !== 'undefined' && user) {
     try {
       const scopedKey = `cryptp-ai-keys-${user.id}`;
-      aiKeys = JSON.parse(localStorage.getItem(scopedKey) || '{}');
+      aiKeys = JSON.parse(localStorage.getItem(scopedKey) || '{}') as AiKeys;
     } catch {
       aiKeys = {};
     }
   }
-  const availableModels: any[] = [];
+  const availableModels: ModelOption[] = [];
   if (aiKeys.openai) availableModels.push({ id: 'openai', name: 'OpenAI (GPT-4o)' });
   if (aiKeys.gemini) availableModels.push({ id: 'gemini', name: 'Google Gemini' });
+  if (aiKeys.claude) availableModels.push({ id: 'claude', name: 'Anthropic Claude' });
 
   const [selectedModel, setSelectedModel] = useState<string>('');
   const activeModel = availableModels.find(m => m.id === selectedModel) ? selectedModel : (availableModels[0]?.id || '');
@@ -105,7 +120,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
   const askAI = async (prompt: string) => {
      if (!activeModel) {
-       return "🔒 **Feature Disabled:** This feature will be available after you provide your OpenAI or Google Gemini API keys in the Settings Panel.";
+       return "🔒 **Feature Disabled:** Provide an OpenAI, Google Gemini, or Anthropic Claude API key in the **Settings Panel** (⚙️ icon) to activate the AI assistant.";
      }
 
      let workspaceContext = "";
@@ -114,7 +129,7 @@ const AIChat: React.FC<AIChatProps> = ({
         const files = currentProject.files || [];
         if (files.length > 0) {
           workspaceContext += `\n\n--- WORKSPACE FILES ---`;
-          files.forEach((f: any) => {
+          files.forEach((f) => {
             workspaceContext += `\nFile: ${f.name}\nContent:\n${f.content}\n---`;
           });
         }
@@ -124,22 +139,24 @@ const AIChat: React.FC<AIChatProps> = ({
         workspaceContext += `\n\n--- RECENT COMPILATION STATE ---`;
         workspaceContext += `\nSuccess: ${compileResult.success}`;
         if (!compileResult.success && compileResult.errors) {
-          workspaceContext += `\nErrors:\n${compileResult.errors.map((e: any) => e.formattedMessage || e.message).join('\n')}`;
+          workspaceContext += `\nErrors:\n${compileResult.errors.map((e: CompilationError) => e.message).join('\n')}`;
         }
      }
 
      if (securityReport) {
         workspaceContext += `\n\n--- RECENT SECURITY AUDIT ---`;
         workspaceContext += `\nSafety Score: ${securityReport.score ?? 'N/A'}/100`;
-        const vulnerabilities = securityReport.vulnerabilities || [];
-        workspaceContext += `\nVulnerabilities Found: ${vulnerabilities.length}`;
-        vulnerabilities.slice(0, 5).forEach((v: any) => {
-          workspaceContext += `\n- [${v.severity}] ${v.type}: ${v.description} (Line ${v.line})`;
+        const findings = securityReport.findings || [];
+        workspaceContext += `\nFindings: ${findings.length}`;
+        findings.slice(0, 5).forEach((f) => {
+          const line = f.range?.start.line;
+          const lineSuffix = line !== undefined ? ` (Line ${line})` : '';
+          workspaceContext += `\n- [${f.severity}] ${f.title}: ${f.description}${lineSuffix}`;
         });
      }
 
      if (activeFileId && activeFileCode) {
-        const activeFileName = currentProject?.files?.find((f: any) => f.id === activeFileId)?.name || 'Unknown';
+        const activeFileName = currentProject?.files?.find((f) => f.id === activeFileId)?.name || 'Unknown';
         workspaceContext += `\n\n--- FOCUSSED FILE: ${activeFileName} ---\n${activeFileCode}\n-------------------------`;
      }
 
@@ -152,7 +169,7 @@ Core Rules:
 - **Bullet Points**: Use concise bullets for reasoning.
 - **Agentic**: If a fix is needed, output the action protocol immediately without a long explanation.
 - **Markdown**: Use headers and bold sparingly for readability.
-- **No Pragma Locks**: Use ^0.8.0.
+- **Locked Pragmas**: Prefer fixed versions (e.g. \`pragma solidity 0.8.20;\`) — avoid floating \`^0.8.0\` pragmas.
 
 --- WORKSPACE CONTEXT ---
 ${workspaceContext}
@@ -175,9 +192,12 @@ Insight -> Concise Bullets -> Action (if any).`;
 
      try {
        if (activeModel === 'gemini') {
-         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${aiKeys.gemini}`, {
+         const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
            method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
+           headers: {
+             'Content-Type': 'application/json',
+             'x-goog-api-key': aiKeys.gemini ?? '',
+           },
            body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }] })
          });
          const data = await res.json();
@@ -192,9 +212,29 @@ Insight -> Concise Bullets -> Action (if any).`;
          const data = await res.json();
          if (data.error) throw new Error(data.error.message);
          return data.choices[0].message.content;
+       } else if (activeModel === 'claude') {
+         // Anthropic Claude — browser-side fetch with official CORS opt-in header
+         const res = await fetch('https://api.anthropic.com/v1/messages', {
+           method: 'POST',
+           headers: {
+             'Content-Type': 'application/json',
+             'x-api-key': aiKeys.claude ?? '',
+             'anthropic-version': '2023-06-01',
+             'anthropic-dangerous-direct-browser-access': 'true',
+           },
+           body: JSON.stringify({
+             model: 'claude-opus-4-5',
+             max_tokens: 4096,
+             system: systemPrompt,
+             messages: [{ role: 'user', content: prompt }]
+           })
+         });
+         const data = await res.json();
+         if (data.error) throw new Error(data.error.message);
+         return data.content[0].text;
        }
-     } catch (err: any) {
-       return `⚠️ AI Provider Error: ${err.message}. Please check your API key in Settings!`;
+     } catch (err: unknown) {
+       return `⚠️ AI Provider Error: ${getErrorMessage(err)}. Please check your API key in Settings!`;
      }
      return "No valid AI configuration.";
   };
@@ -229,7 +269,7 @@ Insight -> Concise Bullets -> Action (if any).`;
                onDeploy();
             }
           }
-       } catch (e: any) {
+       } catch (e: unknown) {
           console.error("Action parsing failed", e);
           try {
             const potentialJsonStr = match[1].substring(match[1].indexOf('{'), match[1].lastIndexOf('}') + 1);
@@ -239,7 +279,7 @@ Insight -> Concise Bullets -> Action (if any).`;
                   onUpdateCode(actionData.content);
                }
             }
-          } catch(e2) {}
+          } catch { /* ignore fallback JSON parse */ }
        }
     }
 
@@ -314,7 +354,7 @@ Insight -> Concise Bullets -> Action (if any).`;
       {/* 💬 Message History */}
       {availableModels.length > 0 ? (
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-         {messages.map((msg: any, idx: number) => (
+         {messages.map((msg, idx) => (
             <div key={idx} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start animate-in fade-in slide-in-from-bottom-1'}`}>
                <div className="flex items-center gap-2 mb-1">
                   {msg.role === 'assistant' && <div className="size-5 bg-blue-500/20 border border-blue-500/30 rounded flex items-center justify-center"><Bug className="size-3 text-blue-400" /></div>}
@@ -329,7 +369,7 @@ Insight -> Concise Bullets -> Action (if any).`;
                    <ReactMarkdown 
                      remarkPlugins={[remarkGfm]}
                      components={{
-                       p: ({children}: any) => {
+                       p: ({ children }: { children?: React.ReactNode }) => {
                          const childrenArray = React.Children.toArray(children);
                          const firstChild = childrenArray[0];
                          
@@ -358,19 +398,19 @@ Insight -> Concise Bullets -> Action (if any).`;
                          }
                          return <p className="mb-4 last:mb-0 leading-relaxed text-[#cccccc]">{children}</p>;
                        },
-                       blockquote: ({children}: any) => (
+                       blockquote: ({ children }: { children?: React.ReactNode }) => (
                          <div className="border-l-4 border-blue-500/50 pl-4 py-1 my-4 bg-blue-500/5 rounded-r">
                             {children}
                          </div>
                        ),
-                       code: ({children}: any) => <code className="bg-[#2d2d2d] px-1.5 py-0.5 rounded text-orange-400 font-mono text-[10px] border border-white/5">{children}</code>,
-                       pre: ({children}: any) => <div className="bg-[#0f0f10] p-3 rounded-lg my-4 border border-[#333] overflow-x-auto shadow-inner">{children}</div>,
-                       ul: ({children}: any) => <ul className="list-disc pl-5 space-y-2 my-4">{children}</ul>,
-                       li: ({children}: any) => <li className="text-[10.5px] font-medium leading-relaxed">{children}</li>,
-                       h1: ({children}: any) => <h1 className="text-base font-black mb-4 text-white border-b border-gray-800 pb-2 mt-6 uppercase tracking-wider">{children}</h1>,
-                       h2: ({children}: any) => <h2 className="text-xs font-black mb-3 text-white border-b border-gray-800 pb-1 mt-6 uppercase tracking-widest">{children}</h2>,
-                       h3: ({children}: any) => <h3 className="text-[11px] font-bold mb-2 text-blue-400 uppercase tracking-tight mt-4">{children}</h3>,
-                       strong: ({children}: any) => <strong className="font-black text-white">{children}</strong>
+                       code: ({ children }: { children?: React.ReactNode }) => <code className="bg-[#2d2d2d] px-1.5 py-0.5 rounded text-orange-400 font-mono text-[10px] border border-white/5">{children}</code>,
+                       pre: ({ children }: { children?: React.ReactNode }) => <div className="bg-[#0f0f10] p-3 rounded-lg my-4 border border-[#333] overflow-x-auto shadow-inner">{children}</div>,
+                       ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-disc pl-5 space-y-2 my-4">{children}</ul>,
+                       li: ({ children }: { children?: React.ReactNode }) => <li className="text-[10.5px] font-medium leading-relaxed">{children}</li>,
+                       h1: ({ children }: { children?: React.ReactNode }) => <h1 className="text-base font-black mb-4 text-white border-b border-gray-800 pb-2 mt-6 uppercase tracking-wider">{children}</h1>,
+                       h2: ({ children }: { children?: React.ReactNode }) => <h2 className="text-xs font-black mb-3 text-white border-b border-gray-800 pb-1 mt-6 uppercase tracking-widest">{children}</h2>,
+                       h3: ({ children }: { children?: React.ReactNode }) => <h3 className="text-[11px] font-bold mb-2 text-blue-400 uppercase tracking-tight mt-4">{children}</h3>,
+                       strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-black text-white">{children}</strong>
                      }}
                    >
                      {msg.content.replace(/```action\n[\s\S]*?\n```/g, "").trim()}

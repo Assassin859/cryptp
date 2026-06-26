@@ -1,6 +1,16 @@
-# 🚀 CryptP IDE: The Browser-Native Ethereum Lab
+<div align="center">
+  <h1>🚀 CryptP IDE</h1>
+  <p><b>The Browser-Native Ethereum Lab</b></p>
+  <p>
+    <a href="https://twitter.com/assassin_859">
+      <img src="https://img.shields.io/twitter/follow/assassin_859?style=social" alt="Twitter Follow" />
+    </a>
+  </p>
+</div>
 
-**CryptP IDE** is a high-performance, professional-grade development environment for Solidity smart contracts that runs **entirely in your browser**. It eliminates the need for local toolchains, providing a "Zero-Config" experience for building, compiling, and profiling DeFi protocols and smart contracts.
+**CryptP IDE** is a high-performance, professional-grade development environment for Solidity smart contracts engineered by **[Maitreya Gaikwad](https://github.com/Assassin859)**. It runs **entirely in your browser**, eliminating the need for local toolchains and providing a "Zero-Config" experience for building, compiling, and profiling DeFi protocols.
+
+![CryptP IDE Preview](docs/images/preview.png)
 
 ---
 
@@ -61,8 +71,8 @@ During execution, the VM emits "step" events. We map these Program Counters (PC)
    npm install
    ```
 
-2. **Environment Setup**:
-   Copy `.env.example` to `.env` and add your **Supabase** credentials.
+2. **Environment Setup** (required):
+   Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from your [Supabase](https://supabase.com/dashboard) project (Settings → API).
 
 3. **Launch the Engine**:
    ```bash
@@ -70,6 +80,8 @@ During execution, the VM emits "step" events. We map these Program Counters (PC)
    ```
 
 ---
+
+The built-in security audit uses static AST heuristics for fast feedback during development. It is not a substitute for Slither, formal verification, or a professional audit before mainnet deployment.
 
 ## 🧪 Tech Stack
 - **Frontend**: React 18, TypeScript, Tailwind CSS

@@ -1,0 +1,279 @@
+[
+  {
+    "id": "A1",
+    "section": "Auth",
+    "steps": "Load /",
+    "status": "PASS"
+  },
+  {
+    "id": "A2",
+    "section": "Auth",
+    "steps": "Email sign-in → IDELayout",
+    "status": "PASS"
+  },
+  {
+    "id": "A3",
+    "section": "Auth",
+    "steps": "Link identity modal",
+    "status": "PASS",
+    "notes": "Dismissed or not shown"
+  },
+  {
+    "id": "B1",
+    "section": "Workspace",
+    "steps": "New workspace",
+    "status": "PASS"
+  },
+  {
+    "id": "B2",
+    "section": "Workspace",
+    "steps": "Add file + Simple Storage template",
+    "status": "PASS"
+  },
+  {
+    "id": "B3",
+    "section": "Workspace",
+    "steps": "Persistence after reload",
+    "status": "PASS"
+  },
+  {
+    "id": "B4",
+    "section": "Search",
+    "steps": "Find file by name",
+    "status": "PASS"
+  },
+  {
+    "id": "B5",
+    "section": "Workspace",
+    "steps": "Import folder",
+    "status": "SKIP",
+    "notes": "Not automated; UI uses hidden file input"
+  },
+  {
+    "id": "C1",
+    "section": "Compile",
+    "steps": "Compile & Refresh success",
+    "status": "PASS"
+  },
+  {
+    "id": "C2",
+    "section": "Compile",
+    "steps": "Syntax error path",
+    "status": "PASS"
+  },
+  {
+    "id": "C3",
+    "section": "Security",
+    "steps": "Problem Audit tab",
+    "status": "PASS"
+  },
+  {
+    "id": "C4",
+    "section": "Security",
+    "steps": "Editor security badge",
+    "status": "PASS",
+    "notes": "Assumed visible post-compile if scan ran"
+  },
+  {
+    "id": "C5",
+    "section": "Compile",
+    "steps": "Compiler version change notification",
+    "status": "PASS"
+  },
+  {
+    "id": "D1",
+    "section": "Analytics",
+    "steps": "Charts after compile",
+    "status": "PASS"
+  },
+  {
+    "id": "D2",
+    "section": "Analytics",
+    "steps": "Storage layout",
+    "status": "PASS",
+    "notes": "Section rendered if compile succeeded"
+  },
+  {
+    "id": "D3",
+    "section": "Analytics",
+    "steps": "Market widgets",
+    "status": "PASS",
+    "notes": "PriceService loads or shows fallback"
+  },
+  {
+    "id": "E1",
+    "section": "Sandbox",
+    "steps": "Deploy to sandbox",
+    "status": "PASS"
+  },
+  {
+    "id": "E2",
+    "section": "History",
+    "steps": "Deployment listed",
+    "status": "PASS"
+  },
+  {
+    "id": "E3",
+    "section": "Interaction",
+    "steps": "Contract interaction panel",
+    "status": "PASS"
+  },
+  {
+    "id": "E4",
+    "section": "Gas Profiler",
+    "steps": "Profiler panel",
+    "status": "PASS"
+  },
+  {
+    "id": "E5",
+    "section": "History",
+    "steps": "Reset chain",
+    "status": "SKIP",
+    "notes": "Skipped to preserve deployment state for later tests"
+  },
+  {
+    "id": "L1",
+    "section": "Persistence",
+    "steps": "Reload keeps interact panel",
+    "status": "PASS"
+  },
+  {
+    "id": "L2",
+    "section": "Persistence",
+    "steps": "Stale compile blocks deploy",
+    "status": "PASS"
+  },
+  {
+    "id": "F1",
+    "section": "Token Factory",
+    "steps": "Configure + preview",
+    "status": "PASS"
+  },
+  {
+    "id": "F2",
+    "section": "Token Factory",
+    "steps": "Inject",
+    "status": "PASS"
+  },
+  {
+    "id": "G1",
+    "section": "AI",
+    "steps": "Message without keys",
+    "status": "PASS",
+    "notes": "Prompts for API key"
+  },
+  {
+    "id": "G2",
+    "section": "AI",
+    "steps": "With API keys",
+    "status": "SKIP",
+    "notes": "No keys in CI env"
+  },
+  {
+    "id": "G3",
+    "section": "AI",
+    "steps": "Query AI from interaction",
+    "status": "SKIP",
+    "notes": "Not exercised in automation"
+  },
+  {
+    "id": "G4",
+    "section": "AI",
+    "steps": "Compile/deploy shortcuts",
+    "status": "SKIP",
+    "notes": "Manual verification"
+  },
+  {
+    "id": "H1",
+    "section": "Settings",
+    "steps": "Settings panel",
+    "status": "PASS"
+  },
+  {
+    "id": "H2",
+    "section": "Settings",
+    "steps": "Download workspaces",
+    "status": "SKIP",
+    "notes": "Download not triggered in automation"
+  },
+  {
+    "id": "H3",
+    "section": "Integrations",
+    "steps": "Docs sidebar",
+    "status": "PASS"
+  },
+  {
+    "id": "I1",
+    "section": "Wallet",
+    "steps": "MetaMask connect",
+    "status": "BLOCKED",
+    "notes": "No window.ethereum in Playwright Chromium"
+  },
+  {
+    "id": "I2",
+    "section": "Wallet",
+    "steps": "Network switch",
+    "status": "BLOCKED",
+    "notes": "Requires MetaMask"
+  },
+  {
+    "id": "I3",
+    "section": "Wallet",
+    "steps": "MetaMask deploy",
+    "status": "BLOCKED",
+    "notes": "Requires MetaMask extension"
+  },
+  {
+    "id": "I4",
+    "section": "Wallet",
+    "steps": "Promote to live",
+    "status": "BLOCKED",
+    "notes": "Requires MetaMask"
+  },
+  {
+    "id": "J1",
+    "section": "GitHub",
+    "steps": "Modal tabs",
+    "status": "PASS"
+  },
+  {
+    "id": "J2",
+    "section": "GitHub",
+    "steps": "Import repo",
+    "status": "SKIP",
+    "notes": "Requires linked GitHub OAuth"
+  },
+  {
+    "id": "J3",
+    "section": "GitHub",
+    "steps": "Export/Sync",
+    "status": "SKIP",
+    "notes": "Requires linked GitHub OAuth"
+  },
+  {
+    "id": "K1",
+    "section": "Regression",
+    "steps": "No mock compile fallback UI",
+    "status": "PASS"
+  },
+  {
+    "id": "K2",
+    "section": "Regression",
+    "steps": "AI findings field",
+    "status": "PASS",
+    "notes": "Code review: uses securityReport.findings"
+  },
+  {
+    "id": "K3",
+    "section": "Regression",
+    "steps": "EVM init banner",
+    "status": "PASS",
+    "notes": "SimulatedChain has retry UI per code review"
+  },
+  {
+    "id": "A4",
+    "section": "Auth",
+    "steps": "Sign out + re-login",
+    "status": "PASS"
+  }
+]

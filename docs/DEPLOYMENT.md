@@ -176,18 +176,12 @@ contract MyToken is ERC20 {
 - Chain ID: 11155111
 - Currency: ETH
 
-**Goerli**
-- Network Name: Goerli Testnet
-- RPC URL: https://goerli.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161
-- Chain ID: 5
-- Currency: ETH
-
 ### Get Testnet ETH
 
 Once connected to your testnet, visit a faucet to get free test ETH:
 
 - **Sepolia**: [sepoliafaucet.com](https://sepoliafaucet.com/)
-- **Goerli**: [goerlifaucet.com](https://goerlifaucet.com/)
+- **Polygon Amoy**: [faucet.polygon.technology](https://faucet.polygon.technology/)
 
 1. Go to the faucet website
 2. Paste your MetaMask wallet address
@@ -304,6 +298,24 @@ Once connected to your testnet, visit a faucet to get free test ETH:
 - Copy address exactly (no extra spaces)
 - Refresh MetaMask
 - Try removing and re-adding token
+
+## CryptP IDE persistence (Supabase + sandbox rehydration)
+
+The in-browser IDE stores durable artifacts in Supabase and rebuilds the local EVM on load:
+
+| Table | Purpose |
+|-------|---------|
+| `files` | Source code |
+| `compilations` | ABI, bytecode, source map, content hash, security report |
+| `deployments` | Deploy/execute/promoted transaction recipes |
+| `gas_profiles` | Saved gas profiler heatmaps |
+| `user_settings` | API keys and preferences |
+
+**Sandbox replay:** On project load, the app fetches `deployments` where `deployment_kind` is `deploy` or `execute` (chronological order), resets `browserVM`, and replays each row. Contract addresses may change after redeploy; the UI maps stored addresses to live ones.
+
+**Schema migration:** Run [`supabase-migration-persistence.sql`](../supabase-migration-persistence.sql) in the Supabase SQL Editor before using persistence features.
+
+**Reset chain:** Clears deployment rows in Supabase and resets the in-browser EVM.
 
 ## Next Steps
 

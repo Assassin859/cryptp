@@ -55,13 +55,26 @@ npm list
 
 ### 4. Configure Environment
 
-```bash
-# Copy the example environment file
-cp .env.example .env.local
+CryptP requires a Supabase project for authentication and cloud workspaces.
 
-# Edit .env.local if needed (no configuration required for local development)
-# nano .env.local
+1. Create a project at [supabase.com](https://supabase.com).
+2. In the dashboard: **Settings → API**, copy the **Project URL** and **anon public** key.
+3. Copy the example env file and add your keys:
+
+```bash
+cp .env.example .env.local
 ```
+
+Edit `.env.local`:
+
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+Optional: `VITE_RPC_URL`, `VITE_ETHERSCAN_API_KEY`, and other variables in `.env.example`.
+
+**Session behavior:** Each new browser tab starts signed out (zombie-session protection). After 15 minutes of inactivity you are signed out automatically. API keys stored in Settings remain in scoped browser localStorage across logout.
 
 ### 5. Verify Installation
 
@@ -83,7 +96,22 @@ npm run dev
 # http://localhost:5173
 ```
 
+## GitHub sync (optional)
+
+1. In Supabase: **Authentication → Providers → GitHub** — enable the provider.
+2. Sign in to CryptP with GitHub so `provider_token` is available for API calls.
+3. If sync fails, log out and sign in again to refresh the token.
+
+## Security notes
+
+- API keys entered in Settings are stored in browser `localStorage` and may sync to Supabase `user_settings`. Never commit `.env.local`.
+- The built-in security scanner uses static heuristics only; use professional tools (Slither, etc.) before mainnet deployment.
+
 ## Troubleshooting
+
+### Compiler fails to load
+
+The in-browser compiler downloads WASM from `https://binaries.soliditylang.org`. Corporate firewalls or offline environments may block this URL.
 
 ### Node/npm Issues
 

@@ -1,17 +1,6 @@
 import React, { useState } from 'react';
 import { Network, ChevronRight, ChevronDown } from 'lucide-react';
-
-export interface CallFrame {
-  type: string; // CALL, DELEGATECALL, STATICCALL
-  from: string;
-  to: string;
-  value: string;
-  gas: number;
-  gasUsed: number;
-  input: string;
-  output: string;
-  calls?: CallFrame[];
-}
+import { CallFrame } from '../utils/browserVM';
 
 interface CallTraceVisualizerProps {
   traceTree: CallFrame;

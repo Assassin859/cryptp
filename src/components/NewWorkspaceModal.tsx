@@ -1,16 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  FolderPlus, 
-  X, 
-  FileCode, 
-  Coins, 
-  Zap, 
-  ShieldCheck, 
-  Award,
-  ChevronRight,
-  Info
-} from 'lucide-react';
-import { allTemplates } from '../utils/contractTemplates';
+import { FolderPlus, X } from 'lucide-react';
 import { Github } from 'lucide-react';
 
 interface NewWorkspaceModalProps {
@@ -27,16 +16,6 @@ const NewWorkspaceModal: React.FC<NewWorkspaceModalProps> = ({ onClose, onCreate
     if (!workspaceName.trim()) return;
     
     onCreate(workspaceName.trim());
-  };
-
-  const getTemplateIcon = (id: string) => {
-    switch (id) {
-      case 'erc20': return <Coins className="size-4 text-yellow-400" />;
-      case 'burnable': return <Zap className="size-4 text-blue-400" />;
-      case 'erc721': return <Award className="size-4 text-purple-400" />;
-      case 'multisig': return <ShieldCheck className="size-4 text-green-400" />;
-      default: return <FileCode className="size-4 text-gray-400" />;
-    }
   };
 
   return (

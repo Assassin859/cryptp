@@ -1,9 +1,10 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import path from 'path';
 
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -25,13 +26,16 @@ export default defineConfig({
     'process.env': {},
   },
   resolve: {
-    alias: {},
+    alias: {
+      '@ethereumjs/util/dist/esm/kzg.js': path.resolve(__dirname, 'src/shims/ethereumjs-kzg.ts'),
+    },
+    dedupe: ['@ethereumjs/util'],
   },
   // lucide-react is standard ESM and should be optimized by Vite to avoid dynamic node_modules requests
   optimizeDeps: {
     include: [
       'lucide-react',
-      '@ethereumjs/vm', '@ethereumjs/common', '@ethereumjs/tx', '@ethereumjs/util', '@ethereumjs/evm', '@ethereumjs/blockchain', '@ethereumjs/statemanager'
+      '@ethereumjs/vm', '@ethereumjs/common', '@ethereumjs/tx', '@ethereumjs/util', '@ethereumjs/evm', '@ethereumjs/statemanager',
     ],
     exclude: ['hardhat', '@nomicfoundation/hardhat-toolbox', '@nomicfoundation/hardhat-ethers', 'ethers'],
     esbuildOptions: {
@@ -48,9 +52,8 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-evm': [
-            '@ethereumjs/vm', '@ethereumjs/common', '@ethereumjs/tx', 
-            '@ethereumjs/util', '@ethereumjs/evm', '@ethereumjs/blockchain', 
-            '@ethereumjs/statemanager'
+            '@ethereumjs/vm', '@ethereumjs/common', '@ethereumjs/tx',
+            '@ethereumjs/util', '@ethereumjs/evm', '@ethereumjs/statemanager',
           ],
           'vendor-web3': ['ethers', '@noble/hashes'],
         }

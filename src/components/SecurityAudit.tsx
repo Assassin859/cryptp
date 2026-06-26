@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SecurityReport } from '../utils/securityScanner';
-import { ShieldCheck, ShieldAlert, ShieldX, Info, CheckCircle2, AlertTriangle, ExternalLink, Zap, ClipboardCheck } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ShieldX, Info, CheckCircle2, AlertTriangle, ExternalLink, Zap, ClipboardCheck, type LucideIcon } from 'lucide-react';
 import SecurityChecklist from './SecurityChecklist';
 
 interface SecurityAuditProps {
@@ -17,7 +17,7 @@ const SeverityBadge: React.FC<{ severity: string }> = ({ severity }) => {
     Info: 'bg-blue-500/10 text-blue-400 border-blue-500/30'
   };
 
-  const icons: Record<string, any> = {
+  const icons: Record<string, LucideIcon> = {
     High: ShieldX,
     Medium: ShieldAlert,
     Low: AlertTriangle,
@@ -153,6 +153,11 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({ report, isScanning, hasCo
                 ))
               )}
             </div>
+          )}
+          {internalTab === 'automated' && (
+            <p className="text-[9px] text-gray-600 px-3 pb-3 border-t border-gray-800/50 pt-2">
+              Static heuristics only — not a substitute for Slither, MythX, or a professional audit.
+            </p>
           )}
         </div>
       </div>

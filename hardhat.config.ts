@@ -31,12 +31,6 @@ export default defineConfig({
       url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
       accounts: process.env.SEPOLIA_PRIVATE_KEY ? [process.env.SEPOLIA_PRIVATE_KEY] : [],
     },
-    goerli: {
-      type: "http",
-      chainType: "l1",
-      url: process.env.GOERLI_RPC_URL || "https://rpc.goerli.org",
-      accounts: process.env.GOERLI_PRIVATE_KEY ? [process.env.GOERLI_PRIVATE_KEY] : [],
-    },
     mainnet: {
       type: "http",
       chainType: "l1",

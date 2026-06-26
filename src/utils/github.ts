@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { getSupabase } from './supabaseClient';
 
 export class GitHubError extends Error {
   constructor(message: string, public status?: number) {
@@ -13,10 +13,13 @@ export class GitHubError extends Error {
  * or it might be stored temporarily. If this fails, the user must re-authenticate.
  */
 export const getProviderToken = async (): Promise<string> => {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await getSupabase().auth.getSession();
   const token = data.session?.provider_token;
   if (!token) {
-    throw new GitHubError('No GitHub access token found in session. Please log out and log back in using GitHub.', 401);
+    throw new GitHubError(
+      'No GitHub access token in session. Enable the GitHub provider in Supabase (Auth → Providers), sign in with GitHub, and ensure repo scope is granted. Then log out and sign in again.',
+      401
+    );
   }
   return token;
 };
@@ -41,7 +44,7 @@ const gitFetch = async (endpoint: string, options: RequestInit = {}) => {
     try {
         const errData = await res.json();
         errorMsg = errData.message || errorMsg;
-    } catch (e) {}
+    } catch { /* response body not JSON */ }
     throw new GitHubError(`GitHub API Error: ${errorMsg}`, res.status);
   }
 
@@ -108,7 +111,7 @@ export const fetchBlobContent = async (url: string): Promise<string> => {
   const base64Clean = res.content.replace(/\n/g, '');
   try {
       return decodeURIComponent(escape(atob(base64Clean)));
-  } catch (e) {
+  } catch {
       return atob(base64Clean);
   }
 };
@@ -139,7 +142,7 @@ export const pushFileToRepo = async (
   // Convert standard string to base64
   const base64Content = btoa(unescape(encodeURIComponent(content)));
   
-  const body: any = {
+  const body: { message: string; content: string; branch: string; sha?: string } = {
       message,
       content: base64Content,
       branch

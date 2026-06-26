@@ -1,13 +1,26 @@
 import React from 'react';
-import { Flame, FileCode, AlertTriangle } from 'lucide-react';
+import { Flame, FileCode, AlertTriangle, Info, ShieldAlert } from 'lucide-react';
+import type { HeatmapQuality } from '../utils/traceMapper';
+import CallTraceVisualizer from './CallTraceVisualizer';
+import { CallFrame } from '../utils/browserVM';
 
 interface GasProfilerProps {
   lineGasMap?: Map<number, number>;
   totalGas?: number;
   isProfiling?: boolean;
+  quality?: HeatmapQuality;
+  unmappedGas?: number;
+  traceTree?: CallFrame;
 }
 
-const GasProfiler: React.FC<GasProfilerProps> = ({ lineGasMap = new Map(), totalGas = 0, isProfiling = false }) => {
+const GasProfiler: React.FC<GasProfilerProps> = ({
+  lineGasMap = new Map(),
+  totalGas = 0,
+  isProfiling = false,
+  quality = 'accurate',
+  unmappedGas = 0,
+  traceTree,
+}) => {
   // Convert Map to array and sort by most expensive lines
   const sortedLines = Array.from(lineGasMap.entries())
     .map(([line, gas]) => ({ line, gas }))
@@ -23,6 +36,8 @@ const GasProfiler: React.FC<GasProfilerProps> = ({ lineGasMap = new Map(), total
     return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
   };
 
+  const unmappedPct = totalGas > 0 ? Math.round((unmappedGas / totalGas) * 100) : 0;
+
   return (
     <div className="h-full flex flex-col bg-[#1e1e1e] overflow-hidden select-none border-l border-[#2d2d2d] w-[300px]">
       <div className="px-4 py-3 border-b border-[#2d2d2d] flex items-center justify-between bg-[#252526]">
@@ -30,6 +45,16 @@ const GasProfiler: React.FC<GasProfilerProps> = ({ lineGasMap = new Map(), total
           <Flame className="size-3.5" />
           Gas Profiler
         </span>
+        {quality === 'partial' && (
+          <span className="text-[8px] font-black uppercase tracking-widest text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 px-2 py-0.5 rounded-full">
+            Partial
+          </span>
+        )}
+        {quality === 'accurate' && totalGas > 0 && (
+          <span className="text-[8px] font-black uppercase tracking-widest text-green-500 bg-green-500/10 border border-green-500/30 px-2 py-0.5 rounded-full">
+            Accurate
+          </span>
+        )}
       </div>
 
       {isProfiling ? (
@@ -42,6 +67,32 @@ const GasProfiler: React.FC<GasProfilerProps> = ({ lineGasMap = new Map(), total
           </div>
           <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] animate-pulse">Analyzing Trace...</p>
         </div>
+
+      ) : quality === 'unavailable' ? (
+        /* ── Proxy / delegatecall: heatmap would be wrong, show explanation instead ── */
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-5 animate-in fade-in duration-500">
+          <div className="relative">
+            <div className="absolute inset-0 bg-amber-500/10 blur-2xl rounded-full" />
+            <div className="relative z-10 size-16 bg-[#252526] rounded-2xl border border-amber-500/30 flex items-center justify-center shadow-2xl">
+              <ShieldAlert className="size-8 text-amber-400" />
+            </div>
+          </div>
+          <div className="space-y-2 px-2">
+            <p className="text-[11px] font-black uppercase tracking-widest text-amber-400">Heatmap Unavailable</p>
+            <p className="text-[10px] text-gray-400 leading-relaxed">
+              This transaction routes most of its execution through a <span className="text-amber-300 font-bold">proxy or delegatecall</span> pattern.
+            </p>
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              Attributing that gas to the outer contract's source lines would produce misleading hotspots. No data is better than wrong data.
+            </p>
+          </div>
+          <div className="w-full bg-[#252526] border border-amber-500/20 rounded-lg p-3 text-left space-y-1">
+            <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Gas summary</p>
+            <p className="text-[10px] text-gray-400 font-mono">Total: <span className="text-white">{totalGas.toLocaleString()}</span></p>
+            <p className="text-[10px] text-gray-400 font-mono">In subcalls: <span className="text-amber-400">{unmappedGas.toLocaleString()} ({unmappedPct}%)</span></p>
+          </div>
+        </div>
+
       ) : !totalGas || lineGasMap.size === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4 opacity-30 group translate-y-4 animate-in fade-in fill-mode-forwards duration-700">
           <div className="size-16 bg-gray-900 rounded-full flex items-center justify-center border border-gray-800 group-hover:border-orange-500/20 transition-colors">
@@ -52,6 +103,7 @@ const GasProfiler: React.FC<GasProfilerProps> = ({ lineGasMap = new Map(), total
              <p className="text-[9px] text-gray-500 leading-relaxed px-4">Execute a function in the Interaction Panel to visualize gas hotspots and bottlenecks.</p>
           </div>
         </div>
+
       ) : (
         <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-6">
           <div className="bg-[#252526] p-4 rounded-xl border border-white/5 relative overflow-hidden shadow-2xl group">
@@ -62,6 +114,16 @@ const GasProfiler: React.FC<GasProfilerProps> = ({ lineGasMap = new Map(), total
                <span className="text-[8px] uppercase font-bold text-gray-600 mt-1">Gas Units</span>
              </div>
           </div>
+
+          {/* Partial quality note */}
+          {quality === 'partial' && unmappedGas > 0 && (
+            <div className="flex items-start gap-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3 animate-in fade-in duration-300">
+              <Info className="size-3 text-yellow-400 mt-0.5 shrink-0" />
+              <p className="text-[9px] text-yellow-300/70 leading-relaxed">
+                <span className="font-black text-yellow-400">~{unmappedPct}% unmapped</span> — gas from cross-contract calls or inline assembly cannot be attributed to a source line.
+              </p>
+            </div>
+          )}
  
           <div className="space-y-4">
             <div className="flex items-center justify-between px-1">
@@ -89,6 +151,12 @@ const GasProfiler: React.FC<GasProfilerProps> = ({ lineGasMap = new Map(), total
                 </div>
               ))}
             </div>
+            
+            {traceTree && (
+              <div className="pt-2">
+                <CallTraceVisualizer traceTree={traceTree} />
+              </div>
+            )}
           </div>
         </div>
       )}

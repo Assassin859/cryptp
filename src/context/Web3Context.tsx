@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { BrowserProvider, JsonRpcSigner, formatEther } from 'ethers';
+import { getErrorMessage } from '../utils/errorMessage';
 
 interface Web3ContextType {
   account: string | null;
@@ -22,7 +23,7 @@ const SUPPORTED_NETWORKS: Record<number, string> = {
   1: 'Ethereum Mainnet',
   11155111: 'Sepolia Testnet',
   137: 'Polygon',
-  80001: 'Mumbai Testnet',
+  80002: 'Polygon Amoy Testnet',
   42161: 'Arbitrum One',
   10: 'Optimism',
   56: 'BNB Smart Chain',
@@ -51,9 +52,9 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       setProvider(browserProvider);
       setSigner(currentSigner);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to update wallet state:', err);
-      setError(err.message || 'Failed to update wallet state');
+      setError(getErrorMessage(err) || 'Failed to update wallet state');
     }
   }, []);
 
@@ -68,8 +69,8 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       const browserProvider = new BrowserProvider(window.ethereum);
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       await updateWalletState(browserProvider);
-    } catch (err: any) {
-      setError(err.message || 'Connection failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || 'Connection failed');
     } finally {
       setIsConnecting(false);
     }
@@ -90,46 +91,47 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }]
       });
-    } catch (err: any) {
-      if (err.code === 4902) {
+    } catch (err: unknown) {
+      const e = err as { code?: number; message?: string };
+      if (e.code === 4902) {
         setError(`Chain ${targetChainId} not found in MetaMask`);
       } else {
-        setError(err.message || 'Network switch failed');
+        setError(e.message || 'Network switch failed');
       }
     }
   };
 
   useEffect(() => {
-    if (window.ethereum) {
-      const browserProvider = new BrowserProvider(window.ethereum);
-      
-      // Auto-connect if already authorized
-      browserProvider.listAccounts().then(accounts => {
-        if (accounts.length > 0) {
-          updateWalletState(browserProvider);
-        }
-      });
+    if (!window.ethereum) return;
 
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length > 0) {
-          updateWalletState(browserProvider);
-        } else {
-          disconnect();
-        }
-      };
+    const browserProvider = new BrowserProvider(window.ethereum);
 
-      const handleChainChanged = () => {
-        window.location.reload();
-      };
+    browserProvider.listAccounts().then(accounts => {
+      if (accounts.length > 0) {
+        updateWalletState(browserProvider);
+      }
+    });
 
-      window.ethereum.on('accountsChanged', handleAccountsChanged as any);
-      window.ethereum.on('chainChanged', handleChainChanged as any);
+    const handleAccountsChanged = (accounts: unknown) => {
+      const list = accounts as string[];
+      if (list.length > 0) {
+        updateWalletState(browserProvider);
+      } else {
+        disconnect();
+      }
+    };
 
-      return () => {
-        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged as any);
-        window.ethereum?.removeListener('chainChanged', handleChainChanged as any);
-      };
-    }
+    const handleChainChanged = () => {
+      window.location.reload();
+    };
+
+    window.ethereum.on?.('accountsChanged', handleAccountsChanged);
+    window.ethereum.on?.('chainChanged', handleChainChanged);
+
+    return () => {
+      window.ethereum?.removeListener?.('accountsChanged', handleAccountsChanged);
+      window.ethereum?.removeListener?.('chainChanged', handleChainChanged);
+    };
   }, [updateWalletState]);
 
   const networkName = chainId ? SUPPORTED_NETWORKS[chainId] || `Chain ${chainId}` : null;

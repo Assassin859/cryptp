@@ -9,7 +9,9 @@ import {
   FolderOpen,
   FilePlus2,
   FolderPlus,
-  Home
+  Home,
+  DownloadCloud,
+  UploadCloud
 } from 'lucide-react';
 import { Project, ContractFile } from '../utils/userData';
 
@@ -24,6 +26,8 @@ interface ExplorerProps {
   onAddFolder: (projectId: string, parentPath?: string) => void;
   onDeleteFolder?: (projectId: string, folderPath: string) => void;
   onImportWorkspace: (projectId: string) => void;
+  onImportZipWorkspace?: (projectId: string) => void;
+  onExportZipWorkspace?: (projectId: string) => void;
   onDeleteFile: (fileId: string) => void;
   onDeleteProject: (projectId: string) => void;
   onCompileFolder?: (projectId: string, folderPath: string) => void;
@@ -32,7 +36,8 @@ interface ExplorerProps {
 
 const ProjectExplorer: React.FC<ExplorerProps> = ({ 
   projects, currentProjectId, activeFileId, 
-  onSelectProject, onCreateProject, onSelectFile, onAddFile, onAddFolder, onDeleteFolder, onImportWorkspace, onDeleteFile, onDeleteProject,
+  onSelectProject, onCreateProject, onSelectFile, onAddFile, onAddFolder, onDeleteFolder, onImportWorkspace,
+  onImportZipWorkspace, onExportZipWorkspace, onDeleteFile, onDeleteProject,
   onCompileFolder, onCompileWorkspace
 }) => {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Record<string, boolean>>({});
@@ -302,12 +307,26 @@ const ProjectExplorer: React.FC<ExplorerProps> = ({
             </button>
           )}
           {contextMenu.type === 'workspace' && (
-            <button 
-              onClick={() => { onCompileWorkspace?.(contextMenu.id); closeContextMenu(); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-blue-400 hover:bg-[#094771] hover:text-white flex items-center gap-2"
-            >
-              <FileCode className="size-3.5" /> Compile Workspace
-            </button>
+            <>
+              <button 
+                onClick={() => { onCompileWorkspace?.(contextMenu.id); closeContextMenu(); }}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-[#cccccc] hover:bg-[#094771] hover:text-white flex items-center gap-2"
+              >
+                <FileCode className="size-3.5" /> Compile Workspace
+              </button>
+              <button 
+                onClick={() => { onImportZipWorkspace?.(contextMenu.id); closeContextMenu(); }}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-[#cccccc] hover:bg-[#094771] hover:text-white flex items-center gap-2"
+              >
+                <UploadCloud className="size-3.5 text-green-400" /> Import Workspace (.zip)
+              </button>
+              <button 
+                onClick={() => { onExportZipWorkspace?.(contextMenu.id); closeContextMenu(); }}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-[#cccccc] hover:bg-[#094771] hover:text-white flex items-center gap-2"
+              >
+                <DownloadCloud className="size-3.5 text-blue-400" /> Export Workspace (.zip)
+              </button>
+            </>
           )}
           <div className="h-px bg-gray-800 my-1" />
           <button 

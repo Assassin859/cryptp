@@ -217,6 +217,30 @@ Before submitting a PR, test:
 - [ ] Works in Chrome, Firefox, Safari
 - [ ] Linting passes (`npm run lint`)
 - [ ] Build succeeds (`npm run build`)
+- [ ] Smoke tests pass (`npm run smoke`)
+
+### Playwright smoke tests (CI)
+
+Pull requests and pushes to `main` run `.github/workflows/playwright.yml`.
+
+**Local run** (starts Vite automatically if not already running):
+
+```bash
+npm run smoke
+```
+
+**Required GitHub Actions secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Purpose |
+|--------|---------|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+| `SMOKE_EMAIL` | Dedicated test account email |
+| `SMOKE_PASSWORD` | Password for that test account |
+
+Copy the smoke variables into `.env` / `.env.local` for local runs (see `.env.example`).
+
+Failed CI runs upload `docs/SMOKE_TEST_REPORT.md` and Playwright traces as workflow artifacts.
 
 ### Adding Tests
 
@@ -312,7 +336,6 @@ Include before/after screenshots
 cryptp/
 ├── src/
 │   ├── components/     # React components
-│   ├── pages/         # Page components
 │   ├── styles/        # CSS/styling
 │   ├── types/         # TypeScript types
 │   ├── utils/         # Utility functions

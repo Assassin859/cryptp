@@ -1,1 +1,2 @@
-export { compile, compileWithHardhat, CompilationResult, DeploymentSimulation, CompilationError } from './hardhatCompiler';
+export { compile, compileWithHardhat } from './hardhatCompiler';
+export type { CompilationResult, DeploymentSimulation, CompilationError } from './hardhatCompiler';

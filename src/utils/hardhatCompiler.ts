@@ -1,7 +1,7 @@
-import * as parser from '@solidity-parser/parser';
 import { COMPILER_VERSIONS, detectPragmaVersion, DEFAULT_VERSION } from './compilerVersions';
 import { priceService } from './PriceService';
 import { browserVM } from './browserVM';
+import { getErrorMessage } from './errorMessage';
 
 export interface CompilationError {
   type: 'error' | 'warning';
@@ -41,58 +41,6 @@ export interface CompilationResult {
   isHardcoded?: boolean; // Indicates if this is hardcoded bytecode
 }
 
-// Strict syntax validation for Solidity using the AST parser
-const validateSyntax = (sourceCode: string, fileName: string = 'contract.sol'): CompilationError[] => {
-  const errors: CompilationError[] = [];
-
-  try {
-    const ast = parser.parse(sourceCode);
-    
-    // Check if there is at least one contract-like definition
-    let hasContract = false;
-    parser.visit(ast, {
-      ContractDefinition: () => { hasContract = true; }
-    });
-
-    if (!hasContract) {
-      errors.push({
-        type: 'error',
-        message: 'No contract, interface, or library definition found in the source code.'
-      });
-    }
-  } catch (err: any) {
-    if (err.errors) {
-       err.errors.forEach((e: any) => {
-          errors.push({
-            type: 'error',
-            message: e.message,
-            sourceLocation: e.loc ? {
-               file: fileName,
-               start: e.loc.start.line,
-               end: e.loc.end.line
-            } : undefined
-          });
-       });
-    } else {
-       errors.push({
-         type: 'error',
-         message: err.message || 'Syntax error in Solidity source'
-       });
-    }
-  }
-
-  // Fallback checks for common non-critical missing items
-  if (!sourceCode.includes('pragma solidity') && errors.length === 0) {
-    errors.push({ type: 'warning', message: 'Missing pragma solidity directive' });
-  }
-
-  if (!sourceCode.includes('SPDX-License-Identifier')) {
-    errors.push({ type: 'warning', message: 'Missing SPDX license identifier (recommended)' });
-  }
-
-  return errors;
-};
-
 // Utility to create a pseudo-random hex string of given length
 const randomHex = (length: number): string => {
   return '0x' +
@@ -120,63 +68,60 @@ const generateDeploymentSimulation = async (gasEstimate: number = 1000000): Prom
   };
 };
 
-// Original Dynamic Mock ABI generation for browser-only mode (used as safety fallback)
-const generateMockABI = (sourceCode: string): unknown[] => {
-  const abi: any[] = [];
-  try {
-    const ast = parser.parse(sourceCode);
-    parser.visit(ast, {
-      FunctionDefinition: (node) => {
-        if (node.isConstructor) {
-          abi.push({
-            type: 'constructor',
-            inputs: node.parameters.map(p => ({
-               name: p.name || '', 
-               type: (p.typeName as any)?.name || 'uint256' 
-            })),
-            stateMutability: node.stateMutability || 'nonpayable'
-          });
-        } else if (node.name) {
-          abi.push({
-            type: 'function',
-            name: node.name,
-            inputs: node.parameters.map(p => ({
-               name: p.name || '', 
-               type: (p.typeName as any)?.name || 'uint256'
-            })),
-            outputs: node.returnParameters ? node.returnParameters.map(p => ({
-               name: p.name || '',
-               type: (p.typeName as any)?.name || 'uint256'
-            })) : [],
-            stateMutability: node.stateMutability || 'nonpayable'
-          });
-        }
-      },
-      EventDefinition: (node) => {
-        abi.push({
-          type: 'event',
-          name: node.name,
-          inputs: node.parameters.map(p => ({
-            name: p.name || '',
-            type: (p.typeName as any)?.name || 'uint256',
-            indexed: !!p.isIndexed
-          })),
-          anonymous: false
-        });
-      }
-    });
-  } catch (e) {
-    return [{ type: 'function', name: 'error', inputs: [], outputs: [{type: 'string'}], stateMutability: 'view' }];
-  }
-  return abi;
-};
-
 // Browser-native compilation using Solc-WASM in a WebWorker
 const worker = typeof window !== 'undefined' ? new Worker(new URL('./compiler.worker.ts', import.meta.url), {
   type: 'module'
 }) : null;
 
 let currentWorkerVersionUrl = '';
+let compileInFlight = false;
+
+type WorkerReply = {
+  requestId?: string;
+  type?: string;
+  success?: boolean;
+  errors?: CompilationError[];
+  abi?: unknown[];
+  bytecode?: string;
+  sourceMap?: string;
+  error?: string;
+};
+
+const workerRequests = new Map<
+  string,
+  { resolve: (data: WorkerReply) => void; reject: (err: Error) => void; timeoutId: ReturnType<typeof setTimeout> }
+>();
+
+function postWorkerRequest(payload: Record<string, unknown>, timeoutMs: number): Promise<WorkerReply> {
+  if (!worker) {
+    return Promise.reject(new Error('Compiler worker is not available'));
+  }
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      workerRequests.delete(requestId);
+      reject(new Error('Compiler worker request timed out'));
+    }, timeoutMs);
+    workerRequests.set(requestId, { resolve, reject, timeoutId });
+    worker.postMessage({ ...payload, requestId });
+  });
+}
+
+if (worker) {
+  worker.addEventListener('message', (event: MessageEvent<WorkerReply>) => {
+    const { requestId } = event.data;
+    if (!requestId) return;
+    const pending = workerRequests.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timeoutId);
+    workerRequests.delete(requestId);
+    if (event.data.type === 'VERSION_LOAD_FAILED') {
+      pending.reject(new Error(event.data.error || 'Worker request failed'));
+    } else {
+      pending.resolve(event.data);
+    }
+  });
+}
 
 /**
  * Resolves remote imports (e.g. @openzeppelin) by fetching them from a CDN.
@@ -311,121 +256,113 @@ async function resolveRemoteImports(
 }
 
 
+const compilationFailed = (
+  message: string,
+  sourceCode: string,
+  activeFileName: string = 'contract.sol'
+): CompilationResult => ({
+  success: false,
+  errors: [{ type: 'error', message, sourceLocation: { file: activeFileName, start: 0, end: 0 } }],
+  sourceCode,
+  code: sourceCode,
+});
+
 const compileInWorker = async (sourceCode: string, contractName: string = 'Contract', projectFiles?: { name: string, content: string }[], forcedVersion?: string, activeFileName: string = 'contract.sol'): Promise<CompilationResult> => {
-  if (!worker) return compileInBrowser(sourceCode, activeFileName);
-
-  // 1. Version Management
-  const detectedVersion = forcedVersion || detectPragmaVersion(sourceCode);
-  const versionData = COMPILER_VERSIONS[detectedVersion || DEFAULT_VERSION];
-  
-  if (versionData && versionData.url !== currentWorkerVersionUrl) {
-    console.log(`Switching compiler to version ${detectedVersion || DEFAULT_VERSION}...`);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          worker.removeEventListener('message', loadHandler);
-          reject(new Error(`Timed out switching to compiler version ${detectedVersion || DEFAULT_VERSION} (35s)`));
-        }, 35000); // 35s UI safety timeout
-
-        const loadHandler = (e: MessageEvent) => {
-          if (e.data.type === 'VERSION_LOADED') {
-            clearTimeout(timeoutId);
-            worker.removeEventListener('message', loadHandler);
-            currentWorkerVersionUrl = versionData.url;
-            resolve();
-          } else if (e.data.type === 'VERSION_LOAD_FAILED') {
-            clearTimeout(timeoutId);
-            worker.removeEventListener('message', loadHandler);
-            reject(new Error(e.data.error || 'Unknown version load error'));
-          }
-        };
-        worker.addEventListener('message', loadHandler);
-        worker.postMessage({ type: 'LOAD_VERSION', versionUrl: versionData.url });
-      });
-    } catch (e: any) {
-      console.error('Compiler Switch Failed:', e.message);
-      // Fallback: If we had a previous version, we might want to stick with it or fail.
-      // For now, we throw so the caller knows compilation cannot proceed.
-      throw e;
-    }
+  if (!worker) {
+    return compilationFailed(
+      'Compiler worker is not available. Refresh the page and try again.',
+      sourceCode,
+      activeFileName
+    );
   }
 
-  // 2. Compilation
-  return new Promise((resolve) => {
-    const handler = async (event: MessageEvent) => {
-      const { success, errors, abi, bytecode, sourceMap } = event.data;
-      worker.removeEventListener('message', handler);
-      
-      if (success) {
-        const contractSize = bytecode ? bytecode.length / 2 : 0;
-        const gasEstimate = Math.max(21000, contractSize * 200);
-        
-        resolve({
-          success: true,
-          errors: errors,
-          abi,
-          bytecode: bytecode.startsWith('0x') ? bytecode : '0x' + bytecode,
-          sourceMap,
-          sourceCode,
-          code: sourceCode,
-          simulation: await generateDeploymentSimulation(gasEstimate),
-          contractSize,
-          gasEstimate
-        });
-      } else {
-        resolve({
-          success: false,
-          errors,
-          sourceCode,
-          code: sourceCode
-        });
+  if (compileInFlight) {
+    return compilationFailed(
+      'A compilation is already in progress. Please wait for it to finish.',
+      sourceCode,
+      activeFileName
+    );
+  }
+
+  compileInFlight = true;
+  try {
+    const detectedVersion = forcedVersion || detectPragmaVersion(sourceCode);
+    const versionData = COMPILER_VERSIONS[detectedVersion || DEFAULT_VERSION];
+
+    if (versionData && versionData.url !== currentWorkerVersionUrl) {
+      console.log(`Switching compiler to version ${detectedVersion || DEFAULT_VERSION}...`);
+      try {
+        const loadReply = await postWorkerRequest(
+          { type: 'LOAD_VERSION', versionUrl: versionData.url },
+          35000
+        );
+        if (loadReply.type === 'VERSION_LOADED') {
+          currentWorkerVersionUrl = versionData.url;
+        }
+      } catch (e: unknown) {
+        console.error('Compiler Switch Failed:', getErrorMessage(e));
+        throw e;
       }
-    };
-    
-    worker.addEventListener('message', handler);
-    
-    // Determine if we are compiling everything or just selective dependencies
-    const compileAll = (sourceCode === '__COMPILE_ALL__');
+    }
+
+    const compileAll = sourceCode === '__COMPILE_ALL__';
     const effectiveSource = compileAll ? '' : sourceCode;
-    
-    resolveRemoteImports(effectiveSource, projectFiles, compileAll).then(expandedFiles => {
-      worker.postMessage({ sourceCode: effectiveSource, contractName, projectFiles: expandedFiles, activeFileName });
-    }).catch(err => {
+
+    let expandedFiles = projectFiles;
+    try {
+      expandedFiles = await resolveRemoteImports(effectiveSource, projectFiles, compileAll);
+    } catch (err) {
       console.error('[Compiler] Remote resolution failed:', err);
-      worker.postMessage({ sourceCode: effectiveSource, contractName, projectFiles, activeFileName });
-    });
+    }
 
-  });
-};
+    const reply = await postWorkerRequest(
+      {
+        type: 'COMPILE',
+        sourceCode: effectiveSource,
+        contractName,
+        projectFiles: expandedFiles,
+        activeFileName,
+      },
+      120000
+    );
 
-const compileInBrowser = async (sourceCode: string, activeFileName: string = 'contract.sol'): Promise<CompilationResult> => {
-  const errors = validateSyntax(sourceCode, activeFileName);
-  if (errors.some(e => e.type === 'error')) {
-    return { success: false, errors, sourceCode, code: sourceCode, isMockResult: true };
+    const { success, errors, abi, bytecode, sourceMap } = reply;
+
+    if (success && bytecode) {
+      const contractSize = bytecode.length / 2;
+      const gasEstimate = Math.max(21000, contractSize * 200);
+      return {
+        success: true,
+        errors,
+        abi,
+        bytecode: bytecode.startsWith('0x') ? bytecode : '0x' + bytecode,
+        sourceMap,
+        sourceCode,
+        code: sourceCode,
+        simulation: await generateDeploymentSimulation(gasEstimate),
+        contractSize,
+        gasEstimate,
+      };
+    }
+
+    return {
+      success: false,
+      errors,
+      sourceCode,
+      code: sourceCode,
+    };
+  } finally {
+    compileInFlight = false;
   }
-
-  const mockBytecode = '0x6080604052348015600f57600080fd5b50602a60005260206000f3' + randomHex(100).substring(2);
-  const contractSize = mockBytecode.length / 2;
-  const gasEstimate = 100000;
-
-  return {
-    success: true,
-    abi: generateMockABI(sourceCode),
-    bytecode: mockBytecode,
-    sourceCode,
-    code: sourceCode,
-    simulation: await generateDeploymentSimulation(gasEstimate),
-    contractSize,
-    gasEstimate,
-    isMockResult: true
-  };
 };
 
 const compileWithRealSolc = async (sourceCode: string, contractName: string = 'Contract', projectFiles?: { name: string, content: string }[], forcedVersion?: string, activeFileName: string = 'contract.sol'): Promise<CompilationResult> => {
   try {
     return await compileInWorker(sourceCode, contractName, projectFiles, forcedVersion, activeFileName);
   } catch (error) {
-    return await compileInBrowser(sourceCode, activeFileName);
+    const message =
+      error instanceof Error ? error.message : 'Compilation failed unexpectedly.';
+    return compilationFailed(message, sourceCode, activeFileName);
   }
 };
 

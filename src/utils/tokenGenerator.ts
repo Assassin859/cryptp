@@ -35,7 +35,6 @@ export const generateTokenCode = (options: TokenOptions): string => {
   
   const imports: string[] = [];
   const inheritances: string[] = [];
-  const constructorArgs: string[] = [];
   const superCalls: string[] = [];
   const stateVariables: string[] = [];
   const constructorBody: string[] = [];
