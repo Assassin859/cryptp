@@ -34,6 +34,20 @@ const SeverityBadge: React.FC<{ severity: string }> = ({ severity }) => {
   );
 };
 
+const ConfidenceBadge: React.FC<{ confidence: string }> = ({ confidence }) => {
+  const styles: Record<string, string> = {
+    High: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    Medium: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    Low: 'bg-gray-500/10 text-gray-400 border-gray-500/30'
+  };
+
+  return (
+    <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold border uppercase tracking-tighter ${styles[confidence] || styles.Medium}`}>
+      Conf: {confidence}
+    </span>
+  );
+};
+
 const SecurityAudit: React.FC<SecurityAuditProps> = ({ report, isScanning, hasCompileError }) => {
   const [internalTab, setInternalTab] = useState<'automated' | 'checklist'>('automated');
 
@@ -91,7 +105,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({ report, isScanning, hasCo
           <div className="space-y-1.5">
              <div className="flex items-center justify-between px-2 py-1 bg-red-500/5 border border-red-500/10 rounded">
                 <span className="text-[9px] font-bold text-gray-500 uppercase">High</span>
-                <span className="text-[10px] font-black text-red-400">{report.summary.high}</span>
+                <span className="text-[10px] font-black text-red-400">{report.summary.high + report.summary.critical}</span>
              </div>
              <div className="flex items-center justify-between px-2 py-1 bg-orange-500/5 border border-orange-500/10 rounded">
                 <span className="text-[9px] font-bold text-gray-500 uppercase">Med</span>
@@ -136,6 +150,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({ report, isScanning, hasCo
                     <div className="flex items-center justify-between mb-2">
                        <div className="flex items-center gap-2">
                           <SeverityBadge severity={finding.severity} />
+                          <ConfidenceBadge confidence={finding.confidence} />
                           <h4 className="text-[11px] font-bold text-gray-200 group-hover:text-indigo-400 transition-colors truncate max-w-[200px] uppercase tracking-tight">{finding.title}</h4>
                        </div>
                        <a href={`https://swcregistry.io/docs/${finding.id}`} target="_blank" rel="noreferrer" title="Registry Reference">

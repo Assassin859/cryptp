@@ -460,13 +460,13 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             const report = scanContract(auditCode);
             section('Security Radar Report');
             term.writeln(`  Safety Score : \x1b[1;${report.score > 80 ? '32' : report.score > 50 ? '33' : '31'}m${report.score}/100\x1b[0m`);
-            term.writeln(`  Findings     : \x1b[1;31m${report.summary.high} High\x1b[0m  \x1b[1;33m${report.summary.medium} Medium\x1b[0m  \x1b[1;36m${report.summary.low} Low\x1b[0m`);
+            term.writeln(`  Findings     : \x1b[1;31m${report.summary.high + report.summary.critical} High\x1b[0m  \x1b[1;33m${report.summary.medium} Medium\x1b[0m  \x1b[1;36m${report.summary.low} Low\x1b[0m`);
 
             if (report.findings.length > 0) {
               term.writeln('');
               report.findings.forEach((f) => {
                 const col = f.severity === 'High' ? '\x1b[1;31m' : f.severity === 'Medium' ? '\x1b[1;33m' : '\x1b[1;36m';
-                term.writeln(`  ${col}[${f.severity}]\x1b[0m ${f.title}`);
+                term.writeln(`  ${col}[${f.severity}][Conf: ${f.confidence || 'High'}]\x1b[0m ${f.title}`);
                 term.writeln(`  \x1b[90m  ${f.description}\x1b[0m`);
               });
             } else {

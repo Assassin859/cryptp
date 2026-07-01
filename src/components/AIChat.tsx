@@ -22,6 +22,7 @@ interface AiKeys {
   openai?: string;
   gemini?: string;
   claude?: string;
+  copilot?: string;
 }
 
 interface ModelOption {
@@ -99,18 +100,25 @@ const AIChat: React.FC<AIChatProps> = ({
     }
   }, [initialPrompt]);
 
-  // Read keys to determine available models
-  let aiKeys: AiKeys = {};
-  if (typeof window !== 'undefined' && user) {
-    try {
-      const scopedKey = `cryptp-ai-keys-${user.id}`;
-      aiKeys = JSON.parse(localStorage.getItem(scopedKey) || '{}') as AiKeys;
-    } catch {
-      aiKeys = {};
-    }
-  }
+  // Reactive key state — re-reads whenever SettingsSidebar saves (same-window via
+  // manual dispatchEvent, or cross-tab via the native storage event).
+  const [aiKeys, setAiKeys] = useState<AiKeys>({});
+
+  useEffect(() => {
+    if (!user) { setAiKeys({}); return; }
+    const scopedKey = `cryptp-ai-keys-${user.id}`;
+    const load = () => {
+      try { setAiKeys(JSON.parse(localStorage.getItem(scopedKey) || '{}')); }
+      catch { setAiKeys({}); }
+    };
+    load();
+    // Fires for cross-tab writes AND same-window writes dispatched by SettingsSidebar
+    window.addEventListener('storage', load);
+    return () => window.removeEventListener('storage', load);
+  }, [user]);
+
   const availableModels: ModelOption[] = [];
-  if (aiKeys.openai) availableModels.push({ id: 'openai', name: 'OpenAI (GPT-4o)' });
+  if (aiKeys.openai) availableModels.push({ id: 'openai', name: 'OpenAI (GPT-4o mini)' });
   if (aiKeys.gemini) availableModels.push({ id: 'gemini', name: 'Google Gemini' });
   if (aiKeys.claude) availableModels.push({ id: 'claude', name: 'Anthropic Claude' });
 
@@ -223,7 +231,7 @@ Insight -> Concise Bullets -> Action (if any).`;
              'anthropic-dangerous-direct-browser-access': 'true',
            },
            body: JSON.stringify({
-             model: 'claude-opus-4-5',
+             model: 'claude-sonnet-4-6',
              max_tokens: 4096,
              system: systemPrompt,
              messages: [{ role: 'user', content: prompt }]

@@ -51,7 +51,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
     }
     
     try { 
-      setAiKeys(JSON.parse(currentAi || '{"openai":"","gemini":"","claude":"","copilot":""}')); 
+      setAiKeys(JSON.parse(currentAi || '{"openai":"","gemini":"","claude":""}')); 
     } catch { setAiKeys({}); }
     
     try { 
@@ -69,6 +69,8 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
      try {
        localStorage.setItem(getScopedKey('cryptp-rpc-keys'), JSON.stringify(rpcKeys));
        localStorage.setItem(getScopedKey('cryptp-ai-keys'), JSON.stringify(aiKeys));
+       // Notify same-window listeners (e.g. AIChat useEffect) — native storage event only fires cross-tab
+       window.dispatchEvent(new Event('storage'));
 
        const { error } = await supabase.from('user_settings').upsert({
          user_id: user.id,
@@ -359,7 +361,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
            </div>
            <p className="text-[9px] text-gray-500 mb-3 pl-1 leading-tight">Bring your own keys to unlock localized AI features like contract auditing and auto-completion without backend proxies.</p>
            <div className="bg-[#121214] border border-gray-800 rounded-lg p-3 space-y-3">
-              {[ { id: 'openai', name: 'OpenAI (ChatGPT)' }, { id: 'gemini', name: 'Google Gemini' }, { id: 'claude', name: 'Anthropic Claude' }, { id: 'copilot', name: 'GitHub Copilot' } ].map(provider => (
+              {[ { id: 'openai', name: 'OpenAI (ChatGPT)' }, { id: 'gemini', name: 'Google Gemini' }, { id: 'claude', name: 'Anthropic Claude' } ].map(provider => (
                 <div key={provider.id}>
                   <label className="text-[9px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">{provider.name}</label>
                   <div className="relative">
