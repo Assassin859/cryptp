@@ -20,6 +20,7 @@ import { SecurityReport } from '../utils/securityScanner';
 import { analyzeStorageLayout } from '../utils/StorageAnalyzer';
 import { priceService } from '../utils/PriceService';
 import { COMPILER_VERSIONS } from '../utils/compilerVersions';
+import { COMPLEX_FUNCTIONS, COMPLEX_FUNCTION_OVERHEAD } from '../constants/gas';
 
 interface MeasurementGateProps {
   children: React.ReactNode;
@@ -103,11 +104,14 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
     
     securityReport?.findings.forEach(f => {
       const penalty = f.severity === 'High' ? 35 : f.severity === 'Medium' ? 20 : 8;
-      if (['S002', 'S013', 'SWC-112'].includes(f.id)) access -= penalty;
+      // Access Control: missing auth, centralisation, delegatecall, tx.origin
+      if (['S002', 'S013', 'SWC-112', 'S016'].includes(f.id)) access -= penalty;
       if (f.id === 'S001') reentrancy -= penalty;
+      // Logic: unsafe patterns, events, locked ether, unchecked returns
       if (['S004', 'S015', 'SWC-132', 'SWC-104'].includes(f.id)) logic -= penalty;
       if (['S003', 'S008'].includes(f.id)) arithmetic -= penalty;
-      if (['S005', 'S006', 'S007'].includes(f.id)) gas -= penalty;
+      // Gas: selfdestruct, unbounded loops, timestamp dep, external call in loop, delegatecall in loop
+      if (['S005', 'S006', 'S007', 'S017', 'S018'].includes(f.id)) gas -= penalty;
     });
 
     return [
@@ -139,8 +143,8 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
         const paramGas = (func.inputs?.length || 0) * 1200;
         let complexityOverhead = 0;
         if (sourceCode) {
-            if (['deposit', 'withdraw', 'transfer', 'mint', 'burn'].includes(func.name.toLowerCase())) {
-                complexityOverhead += 20000;
+            if ((COMPLEX_FUNCTIONS as readonly string[]).includes(func.name.toLowerCase())) {
+                complexityOverhead += COMPLEX_FUNCTION_OVERHEAD;
             }
         }
         return { name: func.name, gas: base + paramGas + complexityOverhead };
@@ -330,8 +334,8 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
                       ${((compileResult?.gasEstimate || 0) * currentGasGwei * 1e-9 * currentEthPrice).toFixed(2)}
                     </span>
                   </div>
-                  <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (compileResult?.gasEstimate || 0) / 10000)}%` }} />
+                  <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden" title={`${(compileResult?.gasEstimate || 0).toLocaleString()} gas / 5M block limit`}>
+                    <div className="h-full bg-blue-500 transition-all duration-700" style={{ width: `${Math.min(100, ((compileResult?.gasEstimate || 0) / 5_000_000) * 100)}%` }} />
                   </div>
                   <div className="mt-2 text-[8px] text-gray-500 flex justify-between">
                     <span>Gas: {currentGasGwei.toFixed(0)} Gwei</span>

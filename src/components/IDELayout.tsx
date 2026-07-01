@@ -622,8 +622,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     }
   };
 
-  const triggerCompile = async (forceCompileAll: boolean = false, targetFilesOverride?: { name: string, content: string }[]) => {
-    if (!code && !forceCompileAll) return;
+  const triggerCompile = async (forceCompileAll: boolean = false, targetFilesOverride?: { name: string, content: string }[]): Promise<CompilationResult | null> => {
+    if (!code && !forceCompileAll) return null;
     setIsCompiling(true);
     try {
       const template = allTemplates.find(t => t.code === code);
@@ -640,12 +640,15 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       
       const result = await compileWithHardhat(sourceSet, hardcodedBytecode, projectFilesMap, compilerVersion, undefined, activeFileName);
       await handleCompilationComplete(result);
+      return result;
     } catch (error) {
       console.error('Compilation error:', error);
-      await handleCompilationComplete({
+      const errResult = {
         success: false,
         errors: [{ type: 'error', message: error instanceof Error ? error.message : 'Unknown error' }]
-      });
+      };
+      await handleCompilationComplete(errResult);
+      return errResult;
     } finally {
       setIsCompiling(false);
     }
@@ -1658,6 +1661,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                          securityReport={securityReport}
                          onCompile={() => triggerCompile(false)}
                          onDeploy={triggerAIDeploy}
+                         lastCompiledSource={lastCompiledSourceRef.current}
                        />
                      )}
                  </div>

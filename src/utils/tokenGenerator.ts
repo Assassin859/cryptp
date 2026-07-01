@@ -306,7 +306,7 @@ export const generateTokenCode = (options: TokenOptions): string => {
         internal
         override(${updateOverrides.join(', ')})
     {
-        super._update(from, to, values, values);
+        super._update(from, to, ids, values);
     }`);
     }
     

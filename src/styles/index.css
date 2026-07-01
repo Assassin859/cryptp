@@ -79,7 +79,6 @@ svg:focus {
   outline: none !important;
 }
 
-/* Global mobile-safe scroll limits */
 @media (max-width: 767px) {
   html, body, #root {
     overflow-x: hidden;
@@ -88,3 +87,18 @@ svg:focus {
   }
 }
 
+/* Landing page glow ring animation */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 30px 4px rgba(99, 102, 241, 0.12), 0 0 0 1px rgba(99, 102, 241, 0.10); }
+  50%       { box-shadow: 0 0 55px 12px rgba(99, 102, 241, 0.28), 0 0 0 1px rgba(99, 102, 241, 0.20); }
+}
+
+.glow-pulse {
+  animation: glowPulse 4s ease-in-out infinite;
+}
+
+/* Dot-grid background pattern for landing page */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+}

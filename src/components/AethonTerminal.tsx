@@ -5,14 +5,17 @@ import 'xterm/css/xterm.css';
 import { browserVM } from '../utils/browserVM';
 import { scanContract } from '../utils/securityScanner';
 import { analyzeStorageLayout } from '../utils/StorageAnalyzer';
+import { COMPLEX_FUNCTIONS, COMPLEX_FUNCTION_OVERHEAD } from '../constants/gas';
+import { CompilationResult } from '../utils/hardhatCompiler';
 
 interface AethonTerminalProps {
   currentProject: any;
   activeFileCode?: string;
   compileResult: any;
   securityReport: any;
-  onCompile: () => Promise<void>;
+  onCompile: () => Promise<CompilationResult | null>;
   onDeploy: () => Promise<void>;
+  lastCompiledSource?: string | null;
 }
 
 const AethonTerminal: React.FC<AethonTerminalProps> = ({
@@ -22,6 +25,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
   securityReport,
   onCompile,
   onDeploy,
+  lastCompiledSource,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const termInstance = useRef<Terminal | null>(null);
@@ -36,6 +40,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
     securityReport,
     onCompile,
     onDeploy,
+    lastCompiledSource,
   });
 
   useEffect(() => {
@@ -46,8 +51,9 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
       securityReport,
       onCompile,
       onDeploy,
+      lastCompiledSource,
     };
-  }, [currentProject, activeFileCode, compileResult, securityReport, onCompile, onDeploy]);
+  }, [currentProject, activeFileCode, compileResult, securityReport, onCompile, onDeploy, lastCompiledSource]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -138,6 +144,16 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
           for (let i = 0; i < currentCommand.length; i++) term.write('\b \b');
           currentCommand = '';
         }
+      } else if (ev.ctrlKey && ev.key === 'l') {
+        // Ctrl+L — clear viewport (scrollback history remains accessible)
+        term.clear();
+        currentCommand = '';
+        prompt();
+      } else if (ev.ctrlKey && ev.key === 'c') {
+        // Ctrl+C — cancel current input, newline so prompt appears on fresh line
+        term.write('^C\r\n');
+        currentCommand = '';
+        prompt();
       } else if (printable) {
         currentCommand += key;
         term.write(key);
@@ -178,6 +194,8 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             ['scan / audit',    'Run Security Radar and print the full audit report.'],
             ['active',          'Show the active project and file info.'],
             ['clear / cls',     'Clear the terminal screen.'],
+            ['Ctrl+L',          'Clear screen (keyboard shortcut). Scrollback history preserved.'],
+            ['Ctrl+C',          'Cancel current input, return to prompt.'],
           ];
           cmds.forEach(([cmd, desc]) => {
             term.writeln(`  \x1b[1;32m${cmd.padEnd(30)}\x1b[0m \x1b[90m${desc}\x1b[0m`);
@@ -209,8 +227,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
         case 'compile':
           term.writeln('Executing WASM Compiler...');
           try {
-            await stateRef.current.onCompile();
-            const res = stateRef.current.compileResult;
+            const res = await stateRef.current.onCompile();
             if (res && res.success) {
               term.writeln('\x1b[1;32m✔ Compilation Succeeded!\x1b[0m');
               if (res.contractSize) term.writeln(`  Contract Size : ${res.contractSize} bytes`);
@@ -285,7 +302,9 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             else if (fn.stateMutability === 'view' || fn.stateMutability === 'pure') baseGas = 0;
             else baseGas = 25000;
             const paramGas = (fn.inputs?.length || 0) * 1200;
-            const total = baseGas + paramGas;
+            const complexityOverhead = (COMPLEX_FUNCTIONS as readonly string[]).includes(fn.name.toLowerCase())
+              ? COMPLEX_FUNCTION_OVERHEAD : 0;
+            const total = baseGas + paramGas + complexityOverhead;
             const mutColor = fn.stateMutability === 'view' || fn.stateMutability === 'pure'
               ? '\x1b[36m' : fn.stateMutability === 'payable' ? '\x1b[33m' : '\x1b[35m';
             const mutLabel = (fn.stateMutability || 'nonpayable').padEnd(12);
@@ -437,7 +456,11 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             section(`Result: ${fnName}`);
             decoded.forEach((val: any, i: number) => {
               const type = outputTypes[i] || '?';
-              const formatted = typeof val === 'bigint' ? val.toString() : String(val);
+              const formatted = typeof val === 'bigint'
+                ? val.toString()
+                : Array.isArray(val) || (typeof val === 'object' && val !== null)
+                  ? JSON.stringify(val, (_k, v) => typeof v === 'bigint' ? v.toString() : v)
+                  : String(val);
               term.writeln(`  [${i}] \x1b[90m${type}\x1b[0m  →  \x1b[1;33m${formatted}\x1b[0m`);
             });
             term.writeln(`  Gas used: \x1b[90m${gasUsed.toLocaleString()}\x1b[0m`);
@@ -457,8 +480,16 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             break;
           }
           try {
-            const report = scanContract(auditCode);
+            const report = stateRef.current.securityReport ?? scanContract(auditCode);
+            const isCached = !!stateRef.current.securityReport;
+            const isStale = isCached && stateRef.current.lastCompiledSource !== auditCode;
+            const source = isCached ? 'cached' : 'live scan';
+
             section('Security Radar Report');
+            term.writeln(`\x1b[90m  Source: ${source}\x1b[0m`);
+            if (isStale) {
+              term.writeln('\x1b[1;33m  ⚠ Warning: code has changed since last compile\x1b[0m');
+            }
             term.writeln(`  Safety Score : \x1b[1;${report.score > 80 ? '32' : report.score > 50 ? '33' : '31'}m${report.score}/100\x1b[0m`);
             term.writeln(`  Findings     : \x1b[1;31m${report.summary.high + report.summary.critical} High\x1b[0m  \x1b[1;33m${report.summary.medium} Medium\x1b[0m  \x1b[1;36m${report.summary.low} Low\x1b[0m`);
 
