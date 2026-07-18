@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Database, Bot, ExternalLink, HelpCircle } from 'lucide-react';
+import { BookOpen, Database, Bot, ExternalLink } from 'lucide-react';
 import DeploymentGuide from './DeploymentGuide';
 
 const DocsSidebar: React.FC = () => {

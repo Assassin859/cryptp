@@ -1,6 +1,5 @@
-import { browserVM, type ReplayEntry } from './browserVM';
+import { browserVM } from './browserVM';
 import {
-  Deployment,
   getDeployments,
   getSandboxReplayLog,
   getGasProfileByDeployment,
@@ -22,19 +21,6 @@ export interface RehydrateSandboxResult {
   errors: string[];
 }
 
-function deploymentToReplayEntry(d: Deployment): ReplayEntry {
-  return {
-    id: d.id,
-    deployment_kind: d.deployment_kind ?? 'deploy',
-    bytecode: d.bytecode,
-    constructor_args: d.constructor_args as unknown[] | undefined,
-    abi: d.abi as unknown[] | undefined,
-    contract_address: d.contract_address,
-    call_data: d.call_data,
-    call_value_wei: d.call_value_wei,
-    gas_limit: d.gas_limit,
-  };
-}
 
 /**
  * Reset browserVM and replay sandbox deploy + execute rows from Supabase.

@@ -9,9 +9,12 @@ import { COMPLEX_FUNCTIONS, COMPLEX_FUNCTION_OVERHEAD } from '../constants/gas';
 import { CompilationResult } from '../utils/hardhatCompiler';
 
 interface AethonTerminalProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   currentProject: any;
   activeFileCode?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   compileResult: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   securityReport: any;
   onCompile: () => Promise<CompilationResult | null>;
   onDeploy: () => Promise<void>;
@@ -179,7 +182,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
       switch (command) {
 
         // ── help ──────────────────────────────────────────────────────────────
-        case 'help':
+        case 'help': {
           term.writeln('\x1b[1;36m  AETHON CLI — Command Reference\x1b[0m');
           hr();
           const cmds = [
@@ -201,6 +204,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             term.writeln(`  \x1b[1;32m${cmd.padEnd(30)}\x1b[0m \x1b[90m${desc}\x1b[0m`);
           });
           break;
+        }
 
         // ── clear ─────────────────────────────────────────────────────────────
         case 'clear':
@@ -235,8 +239,8 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             } else {
               term.writeln('\x1b[1;31m✖ Compilation Failed.\x1b[0m Check the Output tab for error details.');
             }
-          } catch (e: any) {
-            term.writeln(`\x1b[1;31m✖ Compiler error:\x1b[0m ${e.message}`);
+          } catch (e: unknown) {
+            term.writeln(`\x1b[1;31m✖ Compiler error:\x1b[0m ${e instanceof Error ? e.message : String(e)}`);
           }
           break;
 
@@ -251,8 +255,8 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
           try {
             await stateRef.current.onDeploy();
             term.writeln('\x1b[1;32m✔ Deployment successful!\x1b[0m See the Interaction tab.');
-          } catch (e: any) {
-            term.writeln(`\x1b[1;31m✖ Deployment failed:\x1b[0m ${e.message}`);
+          } catch (e: unknown) {
+            term.writeln(`\x1b[1;31m✖ Deployment failed:\x1b[0m ${e instanceof Error ? e.message : String(e)}`);
           }
           break;
         }
@@ -270,8 +274,8 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
               const tag = isActive ? '\x1b[1;32m[Active]\x1b[0m' : '       ';
               term.writeln(`  ${tag} #${i}  \x1b[90m${accs[i]}\x1b[0m  \x1b[1;33m${balance} ETH\x1b[0m`);
             }
-          } catch (e: any) {
-            term.writeln(`\x1b[1;31m✖ Failed to query accounts:\x1b[0m ${e.message}`);
+          } catch (e: unknown) {
+            term.writeln(`\x1b[1;31m✖ Failed to query accounts:\x1b[0m ${e instanceof Error ? e.message : String(e)}`);
           }
           break;
 
@@ -283,8 +287,10 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             break;
           }
           const filter = args[0]?.toLowerCase() || '';
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const abi: any[] = Array.isArray(res.abi) ? res.abi : [];
           const fns = abi.filter(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (item: any) => item.type === 'function' &&
             (!filter || item.name.toLowerCase().includes(filter))
           );
@@ -295,6 +301,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
           }
 
           section(`Gas Estimates${filter ? ` (filter: "${filter}")` : ''}`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           fns.forEach((fn: any) => {
             // Heuristic gas estimate based on mutability + input count
             let baseGas = 21000;
@@ -323,8 +330,10 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             break;
           }
           const filter = args[0]?.toLowerCase() || '';
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const abi: any[] = Array.isArray(res.abi) ? res.abi : [];
           const items = abi.filter(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (item: any) => !filter || (item.name || item.type || '').toLowerCase().includes(filter)
           );
 
@@ -334,13 +343,16 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
           }
 
           section(`ABI Fragments${filter ? ` (filter: "${filter}")` : ''}`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           items.forEach((item: any) => {
             const typeColor = item.type === 'function' ? '\x1b[1;32m'
               : item.type === 'event' ? '\x1b[1;36m'
               : item.type === 'error' ? '\x1b[1;31m'
               : '\x1b[1;33m';
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const inputs = (item.inputs || []).map((i: any) => `${i.type} ${i.name || ''}`).join(', ');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const outputs = (item.outputs || []).map((o: any) => o.type).join(', ');
             const sig = item.name
               ? `${item.name}(${inputs})${outputs ? ` → (${outputs})` : ''}`
@@ -396,8 +408,8 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             } else {
               term.writeln('\x1b[1;32m  ✔ Slot packing is optimal.\x1b[0m');
             }
-          } catch (e: any) {
-            term.writeln(`\x1b[1;31m✖ Storage analysis failed:\x1b[0m ${e.message}`);
+          } catch (e: unknown) {
+            term.writeln(`\x1b[1;31m✖ Storage analysis failed:\x1b[0m ${e instanceof Error ? e.message : String(e)}`);
           }
           break;
         }
@@ -420,7 +432,9 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             break;
           }
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const abi: any[] = Array.isArray(res.abi) ? res.abi : [];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const fn = abi.find((item: any) => item.type === 'function' && item.name === fnName);
           if (!fn) {
             term.writeln(`\x1b[1;31m✖ Function "${fnName}" not found in ABI.\x1b[0m Use \x1b[1;32mabi\x1b[0m to list available functions.`);
@@ -433,6 +447,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             const iface = new Interface(abi);
 
             // Basic type coercion for args
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const processedArgs = (fn.inputs || []).map((input: any, i: number) => {
               const raw = fnArgs[i] || '';
               if (input.type.includes('uint') || input.type.includes('int')) {
@@ -451,9 +466,11 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             }
 
             const decoded = iface.decodeFunctionResult(fnName, returnValue);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const outputTypes = (fn.outputs || []).map((o: any) => o.type);
 
             section(`Result: ${fnName}`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             decoded.forEach((val: any, i: number) => {
               const type = outputTypes[i] || '?';
               const formatted = typeof val === 'bigint'
@@ -464,8 +481,8 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
               term.writeln(`  [${i}] \x1b[90m${type}\x1b[0m  →  \x1b[1;33m${formatted}\x1b[0m`);
             });
             term.writeln(`  Gas used: \x1b[90m${gasUsed.toLocaleString()}\x1b[0m`);
-          } catch (e: any) {
-            term.writeln(`\x1b[1;31m✖ Call failed:\x1b[0m ${e.message}`);
+          } catch (e: unknown) {
+            term.writeln(`\x1b[1;31m✖ Call failed:\x1b[0m ${e instanceof Error ? e.message : String(e)}`);
           }
           break;
         }
@@ -503,8 +520,8 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
             } else {
               term.writeln('\x1b[1;32m  ✔ 0 findings. Contract looks clean!\x1b[0m');
             }
-          } catch (e: any) {
-            term.writeln(`\x1b[1;31m✖ Security scan failed:\x1b[0m ${e.message}`);
+          } catch (e: unknown) {
+            term.writeln(`\x1b[1;31m✖ Security scan failed:\x1b[0m ${e instanceof Error ? e.message : String(e)}`);
           }
           break;
         }
@@ -519,7 +536,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
 
     // Auto-fit on window resize
     const handleResize = () => {
-      try { fitAddon.fit(); } catch {}
+      try { fitAddon.fit(); } catch { /* ignore resize fit error */ }
     };
     window.addEventListener('resize', handleResize);
 

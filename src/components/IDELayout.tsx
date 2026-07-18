@@ -117,7 +117,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   const [code, setCode] = useState<string>('');
   const [compileResult, setCompileResult] = useState<CompilationResult | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
+  const [isScanning, _setIsScanning] = useState(false);
   const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
   const [hasCompiledInSession, setHasCompiledInSession] = useState(false);
   const [aiPromptOverride, setAiPromptOverride] = useState<{prompt: string, theme: string} | null>(null);
@@ -413,6 +413,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       } catch (error) { console.error('Failed to load user data:', error); } finally { setIsLoadingProjects(false); }
     };
     loadUserData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   // Load deployments + rehydrate sandbox when project changes
@@ -475,6 +476,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     };
 
     loadAndRehydrate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id, userId]);
 
   // Restore latest compilation + security report for active file
@@ -509,6 +511,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     };
 
     restoreCompilation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFileId, currentProject?.id, userId, isLoadingProjects, code]);
 
   // Sync activeDeployment ABI with compilation result if activeDeployment lacks ABI
@@ -575,6 +578,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     
     const timeoutId = setTimeout(saveCode, 1000);
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, activeFileId, isLoadingProjects]);
 
   useEffect(() => {
@@ -584,6 +588,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             setCurrentProject(updated);
         }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects]);
 
 

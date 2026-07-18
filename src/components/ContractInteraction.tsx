@@ -7,7 +7,6 @@ import { browserVM, EventLog, GasReport } from '../utils/browserVM';
 import { useWeb3 } from '../context/Web3Context';
 import { isAbiFunction, asAbiArray, type AbiFragment } from '../types/abi';
 import { getErrorMessage } from '../utils/errorMessage';
-import type { SaveDeploymentPayload } from '../utils/userData';
 
 
 interface ContractInteractionProps {

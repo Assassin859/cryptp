@@ -84,13 +84,6 @@ function projectSidebar(page: Page) {
   return page.locator('aside:not(.w-14)');
 }
 
-async function ensureBottomPanel(page: Page): Promise<void> {
-  const terminalBtn = page.locator('button').filter({ has: page.locator('svg') }).nth(0);
-  const outputTab = page.getByRole('button', { name: 'Output', exact: true });
-  if (!(await outputTab.isVisible().catch(() => false))) {
-    await page.getByRole('button', { name: /terminal/i }).first().click({ timeout: 3000 }).catch(() => {});
-  }
-}
 
 test.describe.serial('CryptP IDE full smoke test', () => {
   let page: Page;

@@ -148,7 +148,6 @@ export function mapTraceToLines(
   const proxyRatio = totalSteps > 0 ? (totalSteps - depth1Steps) / totalSteps : 0;
 
   // ── 3. Map top-level steps to source lines ───────────────────────────────
-  let mappedGas = 0;
   let unmappedGas = 0;
   let totalTracedGas = 0;
 
@@ -179,7 +178,6 @@ export function mapTraceToLines(
     const lineMap = offsetToLineColumn(sourceCode, mappedLoc.offset);
     const currentGas = lineGasMap.get(lineMap.line) ?? 0;
     lineGasMap.set(lineMap.line, currentGas + stepGas);
-    mappedGas += stepGas;
   });
 
   // ── 4. Determine quality rating ───────────────────────────────────────────

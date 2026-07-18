@@ -41,15 +41,15 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, dep
 
   const abiList = asAbiArray(result.abi);
   const constructorInputs = (abiList.find(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (item: any) => item && item.type === 'constructor'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) as any)?.inputs || [];
 
-  const isDegradedCompile = Boolean(result.isMockResult || result.isHardcoded);
+  const isDegradedCompile = Boolean(result.isMockResult);
   const deployBlocked = !canDeploy || isDegradedCompile;
   const deployBlockedReason = !canDeploy
     ? 'Source changed since last compile. Recompile before deploying.'
-    : result.isHardcoded
-    ? 'Bytecode was injected manually and cannot be deployed from this panel.'
     : result.isMockResult
       ? 'Compilation did not produce real bytecode. Fix errors and recompile.'
       : null;
@@ -269,6 +269,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, dep
             
             {expandedSections.has('constructor') && (
               <div className="p-4 space-y-3 bg-[#1a1a1a] border-t border-[#2d2d2d]/30">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {constructorInputs.map((input: any, index: number) => {
                   const inputName = input.name || `arg_${index}`;
                   return (

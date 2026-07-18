@@ -98,6 +98,7 @@ const AIChat: React.FC<AIChatProps> = ({
       };
       runInitial();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPrompt]);
 
   // Reactive key state — re-reads whenever SettingsSidebar saves (same-window via

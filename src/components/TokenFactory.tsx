@@ -101,6 +101,7 @@ const TokenFactory: React.FC<TokenFactoryProps> = ({ onInjectCode, onPreview }) 
     if (isLiveSync && isValid) {
       onPreview(code, tokenType);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenType, name, symbol, supply, cap, baseUri, features, accessControl, isLiveSync, isValid]);
 
   const toggleFeature = (feature: string) => {

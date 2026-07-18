@@ -349,6 +349,7 @@ class BrowserVM {
       const frameStack: CallFrame[] = [];
       let rootFrame: CallFrame | null = null;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const beforeMessageListener = (message: any, next?: () => void) => {
           const frame: CallFrame = {
               type: message.delegatecall ? 'DELEGATECALL' : message.isStatic ? 'STATICCALL' : 'CALL',
@@ -372,6 +373,7 @@ class BrowserVM {
           next?.();
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const afterMessageListener = (result: any, next?: () => void) => {
           const frame = frameStack.pop();
           if (frame && result.execResult) {
@@ -522,6 +524,7 @@ class BrowserVM {
         const frameStack: CallFrame[] = [];
         let rootFrame: CallFrame | null = null;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const beforeMessageListener = (message: any, next?: () => void) => {
             const frame: CallFrame = {
                 type: message.delegatecall ? 'DELEGATECALL' : message.isStatic ? 'STATICCALL' : 'CALL',
@@ -545,6 +548,7 @@ class BrowserVM {
             next?.();
         };
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const afterMessageListener = (result: any, next?: () => void) => {
             const frame = frameStack.pop();
             if (frame && result.execResult) {

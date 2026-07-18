@@ -58,6 +58,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
       setRpcKeys(JSON.parse(currentRpc || '{"alchemy":"","infura":"","etherscan":""}')); 
     } catch { setRpcKeys({}); }
     
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const [visibleKey, setVisibleKey] = useState<string | null>(null);

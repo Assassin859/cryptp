@@ -28,6 +28,7 @@ export interface StorageLayout {
 // ─── Internal Helpers ─────────────────────────────────────────────────────────
 
 /** Map of struct name → ordered list of { name, typeName } for its fields */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type StructDefs = Map<string, Array<{ name: string; typeName: any }>>;
 
 /**
@@ -42,6 +43,7 @@ type StructDefs = Map<string, Array<{ name: string; typeName: any }>>;
  *  - struct: expand all members with recursive packing; size = total packed slots × 32
  */
 function resolveType(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typeNode: any,
   structDefs: StructDefs
 ): { byteSize: number; category: StorageCategory; label: string } {
@@ -156,6 +158,7 @@ function resolveType(
  * Returns { slots: number, variables: partial StorageVariable[] }
  */
 function packMembers(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   members: Array<{ name: string; typeName: any }>,
   structDefs: StructDefs
 ): { slots: number; vars: Array<{ name: string; type: string; byteSize: number; slot: number; offset: number; category: StorageCategory }> } {
@@ -218,7 +221,9 @@ export function analyzeStorageLayout(sourceCode: string): StorageLayout {
     // First pass: collect all struct definitions
     const structDefs: StructDefs = new Map();
     parser.visit(ast, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       StructDefinition: (node: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const members = (node.members || []).map((m: any) => ({
           name: m.name || '',
           typeName: m.typeName,
@@ -229,14 +234,18 @@ export function analyzeStorageLayout(sourceCode: string): StorageLayout {
 
     // Second pass: process state variables for each contract in the file
     parser.visit(ast, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ContractDefinition: (contractNode: any) => {
         // Only process contract bodies (not interfaces / libraries for now)
         if (contractNode.kind === 'interface') return;
 
         // Collect state variable declarations in order
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const stateVarNodes: Array<{ name: string; typeName: any }> = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (contractNode.subNodes || []).forEach((node: any) => {
           if (node.type === 'StateVariableDeclaration') {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (node.variables || []).forEach((v: any) => {
               // Skip constants and immutables — they have no storage slot
               if (v.isDeclaredConst || v.isImmutable) return;

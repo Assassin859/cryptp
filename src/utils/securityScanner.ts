@@ -339,11 +339,11 @@ export const scanContract = (sourceCode: string): SecurityReport => {
         // Look inside function body
         if (node.body) {
           let hasMsgSenderCheck = false;
-          let externalCallLines: number[] = [];
-          let stateWriteLines: number[] = [];
+          const externalCallLines: number[] = [];
+          const stateWriteLines: number[] = [];
           let stateChanged = false;
           let hasEventEmitted = false;
-          let hasOnlyOwner = node.modifiers && node.modifiers.some((mod: any) => mod.name === 'onlyOwner');
+          const hasOnlyOwner = node.modifiers && node.modifiers.some((mod: any) => mod.name === 'onlyOwner');
 
           // Detect if this function transfers balance or selfdestructs
           let transfersBalanceOrSelfdestructs = false;
@@ -378,7 +378,6 @@ export const scanContract = (sourceCode: string): SecurityReport => {
             // Find external calls
             FunctionCall: (callNode) => {
               let isCall = false;
-              let isDelegate = false;
               const callExprAny = callNode.expression as any;
 
               if (callExprAny.type === 'MemberAccess') {
@@ -386,9 +385,6 @@ export const scanContract = (sourceCode: string): SecurityReport => {
                 if (['call', 'transfer', 'send'].includes(memberName)) {
                   isCall = true;
                   canWithdrawEther = true;
-                }
-                if (memberName === 'delegatecall') {
-                  isDelegate = true;
                 }
               } else if (
                 (callExprAny.type === 'FunctionCallOptions' || callExprAny.type === 'NameValueExpression') &&
@@ -399,9 +395,6 @@ export const scanContract = (sourceCode: string): SecurityReport => {
                 if (['call', 'transfer', 'send'].includes(memberName)) {
                   isCall = true;
                   canWithdrawEther = true;
-                }
-                if (memberName === 'delegatecall') {
-                  isDelegate = true;
                 }
               }
 

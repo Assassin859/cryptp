@@ -38,7 +38,7 @@ const SolidityEditor: React.FC<SolidityEditorProps> = ({
   isScanning,
   onCompile,
   githubRepo = null,
-  githubBranch = 'main'
+  githubBranch: _githubBranch = 'main'
 }) => {
   const [showStartScreen, setShowStartScreen] = useState(!code && !activeFileName);
   const [isDiffMode, setIsDiffMode] = useState(false);

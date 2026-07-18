@@ -156,6 +156,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWeb3 = () => {
   const context = useContext(Web3Context);
   if (context === undefined) {
