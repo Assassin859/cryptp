@@ -37,3 +37,9 @@ artifacts/
 cache/
 types/ethers-contracts/
 coverage/
+
+# Playwright / local test artifacts (may contain auth tokens)
+test-results/
+playwright-report/
+blob-report/
+dist-test/

@@ -33,8 +33,9 @@
   {
     "id": "B3",
     "section": "Workspace",
-    "steps": "Persistence after reload",
-    "status": "PASS"
+    "steps": "Persistence",
+    "status": "FAIL",
+    "notes": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.view-lines')\nExpected substring: \u001b[32m\"smoke-marker\"\u001b[39m\nReceived string:    \u001b[31m\"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for locator('.view-lines')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-mprt=\"8\" aria-hidden=\"true\" role=\"presentation\" class=\"view-lines monaco-mouse-cursor-text\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[22m\n"
   },
   {
     "id": "B4",

@@ -30,6 +30,36 @@ const SUPPORTED_NETWORKS: Record<number, string> = {
   8453: 'Base Mainnet'
 };
 
+const CHAIN_ADD_PARAMS: Record<number, {
+  chainId: string;
+  chainName: string;
+  nativeCurrency: { name: string; symbol: string; decimals: number };
+  rpcUrls: string[];
+  blockExplorerUrls?: string[];
+}> = {
+  11155111: {
+    chainId: '0xaa36a7',
+    chainName: 'Sepolia',
+    nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://rpc.sepolia.org'],
+    blockExplorerUrls: ['https://sepolia.etherscan.io'],
+  },
+  80002: {
+    chainId: '0x13882',
+    chainName: 'Polygon Amoy',
+    nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+    rpcUrls: ['https://rpc-amoy.polygon.technology'],
+    blockExplorerUrls: ['https://amoy.polygonscan.com'],
+  },
+  8453: {
+    chainId: '0x2105',
+    chainName: 'Base',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://mainnet.base.org'],
+    blockExplorerUrls: ['https://basescan.org'],
+  },
+};
+
 export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [account, setAccount] = useState<string | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
@@ -86,14 +116,28 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const switchNetwork = async (targetChainId: number) => {
     if (!window.ethereum) return;
+    const chainIdHex = `0x${targetChainId.toString(16)}`;
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${targetChainId.toString(16)}` }]
+        params: [{ chainId: chainIdHex }]
       });
     } catch (err: unknown) {
       const e = err as { code?: number; message?: string };
       if (e.code === 4902) {
+        const addParams = CHAIN_ADD_PARAMS[targetChainId];
+        if (addParams) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [addParams],
+            });
+            return;
+          } catch (addErr: unknown) {
+            setError(getErrorMessage(addErr) || `Failed to add chain ${targetChainId}`);
+            return;
+          }
+        }
         setError(`Chain ${targetChainId} not found in MetaMask`);
       } else {
         setError(e.message || 'Network switch failed');
@@ -115,14 +159,19 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleAccountsChanged = (accounts: unknown) => {
       const list = accounts as string[];
       if (list.length > 0) {
-        updateWalletState(browserProvider);
+        // Always rebuild provider — MetaMask can invalidate the old one.
+        const next = new BrowserProvider(window.ethereum!);
+        updateWalletState(next);
       } else {
         disconnect();
       }
     };
 
+    // Soft-refresh wallet state only. Full reload wiped in-memory IDE work
+    // (compile results, active deployment panel, unsaved editor context).
     const handleChainChanged = () => {
-      window.location.reload();
+      const next = new BrowserProvider(window.ethereum!);
+      void updateWalletState(next);
     };
 
     window.ethereum.on?.('accountsChanged', handleAccountsChanged);

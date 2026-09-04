@@ -240,7 +240,7 @@ npm run smoke
 
 Copy the smoke variables into `.env` / `.env.local` for local runs (see `.env.example`).
 
-Failed CI runs upload `docs/SMOKE_TEST_REPORT.md` and Playwright traces as workflow artifacts.
+Failed CI runs upload `docs/SMOKE_TEST_REPORT.md` and `tests/e2e/smoke-results.json` as workflow artifacts. Playwright traces are **not** uploaded (they can contain credentials).
 
 ### Adding Tests
 

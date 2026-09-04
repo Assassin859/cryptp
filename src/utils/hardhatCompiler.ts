@@ -375,16 +375,20 @@ export const compile = async (
   activeFileName: string = 'contract.sol'
 ): Promise<CompilationResult> => {
   if (hardcodedBytecode) {
+    // Never invent a fake ABI — callers must compile for a real ABI+bytecode pair.
     return {
-      success: true,
-      abi: [{ type: 'function', name: 'getValue', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' }],
-      bytecode: hardcodedBytecode,
+      success: false,
+      errors: [
+        {
+          severity: 'error',
+          message:
+            'Hardcoded bytecode without a real compile is disabled. Compile the source to obtain a matching ABI.',
+          formattedMessage:
+            'Hardcoded bytecode without a real compile is disabled. Compile the source to obtain a matching ABI.',
+        },
+      ],
       sourceCode,
       code: sourceCode,
-      simulation: await generateDeploymentSimulation(100000),
-      contractSize: hardcodedBytecode.length / 2,
-      gasEstimate: 100000,
-      isHardcoded: true
     };
   }
 

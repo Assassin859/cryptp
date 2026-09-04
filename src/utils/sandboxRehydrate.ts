@@ -1,4 +1,5 @@
 import { browserVM } from './browserVM';
+import type { CallFrame } from './browserVM';
 import {
   getDeployments,
   getSandboxReplayLog,
@@ -17,6 +18,7 @@ export interface RehydrateSandboxResult {
     totalGas: number;
     quality: HeatmapQuality;
     unmappedGas: number;
+    traceTree?: CallFrame;
   };
   errors: string[];
 }
@@ -30,23 +32,29 @@ export async function rehydrateSandboxFromDb(
   projectId: string
 ): Promise<RehydrateSandboxResult> {
   const replayLog = await getSandboxReplayLog(userId, projectId);
-  await browserVM.reset();
-  const { addressMap, errors } = await browserVM.rehydrate(replayLog);
+  const allDeployments = await getDeployments(userId, projectId);
 
-  const allDeployments = replayLog.length > 0
-    ? await getDeployments(userId, projectId)
-    : [];
+  let addressMap = new Map<string, string>();
+  let txHashMap = new Map<string, string>();
+  let errors: string[] = [];
+
+  if (replayLog.length > 0) {
+    await browserVM.reset();
+    ({ addressMap, txHashMap, errors } = await browserVM.rehydrate(replayLog));
+  }
 
   const simulations: SimulatedDeployment[] = allDeployments.map((d) => {
     const storedAddr = d.contract_address?.toLowerCase() ?? '';
     const liveAddr = addressMap.get(storedAddr) ?? d.contract_address ?? '';
-    return deploymentToSimulation(d, liveAddr);
+    const liveTxHash = txHashMap.get(d.id) ?? d.tx_hash ?? '';
+    return deploymentToSimulation(d, liveAddr, liveTxHash);
   });
 
   let profilerData: RehydrateSandboxResult['profilerData'];
   const executeRows = replayLog.filter((r) => r.deployment_kind === 'execute');
   const lastExecute = executeRows[executeRows.length - 1];
   if (lastExecute) {
+    const liveTxHash = txHashMap.get(lastExecute.id) ?? lastExecute.tx_hash ?? '';
     const profile = await getGasProfileByDeployment(userId, lastExecute.id);
     if (profile) {
       profilerData = {
@@ -55,6 +63,18 @@ export async function rehydrateSandboxFromDb(
         quality: (profile.quality as HeatmapQuality) ?? 'accurate',
         unmappedGas: profile.unmapped_gas ?? 0,
       };
+    }
+    if (liveTxHash) {
+      const trace = await browserVM.getTransactionTrace(liveTxHash);
+      if (trace?.traceTree) {
+        profilerData = {
+          lineGasMap: profilerData?.lineGasMap ?? new Map(),
+          totalGas: profilerData?.totalGas ?? trace.gas ?? 0,
+          quality: profilerData?.quality ?? 'accurate',
+          unmappedGas: profilerData?.unmappedGas ?? 0,
+          traceTree: trace.traceTree,
+        };
+      }
     }
   }
 

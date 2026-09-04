@@ -2,9 +2,11 @@ import { test, expect, type Page } from '@playwright/test';
 import { record, writeReport, getDefects } from './helpers/results';
 import { cleanupSmokeWorkspaces } from './helpers/cleanup';
 
-const SMOKE_EMAIL = process.env.SMOKE_EMAIL || 'codeemail001@gmail.com';
-const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD || 'Assassin@01';
-const ALT_PASSWORD = 'Assassin@1';
+const SMOKE_EMAIL = process.env.SMOKE_EMAIL;
+const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD;
+if (!SMOKE_EMAIL || !SMOKE_PASSWORD) {
+  throw new Error('SMOKE_EMAIL and SMOKE_PASSWORD must be set (see .env.example)');
+}
 
 async function isIdeShell(page: Page): Promise<boolean> {
   return page.getByRole('button', { name: 'Exit' }).isVisible().catch(() => false);
@@ -41,8 +43,6 @@ async function login(page: Page): Promise<void> {
       if (invalid) break;
       await page.waitForTimeout(2000);
     }
-    await trySignIn(ALT_PASSWORD);
-    if (await isIdeShell(page)) return;
   }
 
   await expect(page.getByRole('button', { name: 'Exit' })).toBeVisible({ timeout: 60_000 });
@@ -164,13 +164,37 @@ test.describe.serial('CryptP IDE full smoke test', () => {
 
     try {
       if (!workspaceReady) throw new Error('Skipped — workspace not created in B1');
-      const editor = page.locator('.monaco-editor');
-      await editor.click();
-      await page.keyboard.press('End');
-      await page.keyboard.type('\n// smoke-marker');
-      // Wait for autosave debounce (1s) + Supabase round-trip
-      await page.waitForTimeout(2500);
+      await projectSidebar(page).getByText(`${contractName}.sol`).first().click();
+      await page.waitForTimeout(500);
+      const saveResponse = page.waitForResponse(
+        (r) => r.url().includes('/rest/v1/files') && r.request().method() === 'PATCH',
+        { timeout: 20_000 }
+      );
+      const edited = await page.evaluate(() => {
+        const monacoAny = (window as unknown as Record<string, unknown>).monaco;
+        if (!monacoAny || typeof monacoAny !== 'object') return false;
+        const monaco = monacoAny as {
+          editor: {
+            getEditors: () => Array<{
+              getModel: () => { getValue: () => string; getFullModelRange: () => unknown };
+              executeEdits: (source: string, edits: Array<{ range: unknown; text: string }>) => void;
+            }>;
+          };
+        };
+        const editor = monaco.editor.getEditors()[0];
+        const model = editor?.getModel();
+        if (!editor || !model) return false;
+        editor.executeEdits('smoke-test', [{
+          range: model.getFullModelRange(),
+          text: `${model.getValue()}\n// smoke-marker`,
+        }]);
+        return true;
+      });
+      if (!edited) throw new Error('Monaco model not available for B3 persistence test');
+      await saveResponse;
+      await page.waitForTimeout(500);
       await clickActivity(page, 'explorer');
+      await projectSidebar(page).getByText(workspaceName, { exact: true }).click();
       await page.reload();
       await page.waitForLoadState('domcontentloaded');
       await login(page);
@@ -180,7 +204,8 @@ test.describe.serial('CryptP IDE full smoke test', () => {
         { timeout: 30_000 }
       ).catch(() => {});
       await clickActivity(page, 'explorer');
-      await page.getByText(`${contractName}.sol`).first().click();
+      await projectSidebar(page).getByText(workspaceName, { exact: true }).click();
+      await projectSidebar(page).getByText(`${contractName}.sol`).first().click();
       await expect(page.locator('.view-lines')).toContainText('smoke-marker', { timeout: 15_000 });
       const content = await page.locator('.view-lines').textContent();
       record(

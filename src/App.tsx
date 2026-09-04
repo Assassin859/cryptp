@@ -106,7 +106,7 @@ function App() {
         .filter(
           (key) =>
             key.startsWith('cryptp-') &&
-            !key.endsWith('-keys') &&
+            !key.includes('-keys') &&
             !key.includes('new-user') &&
             !key.includes('dismiss-link-modal')
         )

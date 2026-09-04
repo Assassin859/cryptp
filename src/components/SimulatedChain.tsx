@@ -403,6 +403,7 @@ const SimulatedChain: React.FC<SimulatedChainProps> = ({
                 return (
                   <div
                     key={`${dep.contractAddress}-${dep.transactionHash}`}
+                    data-testid="simulation-row"
                     className={`canvas-node absolute bg-[#1e1e1e] border rounded-lg p-3.5 w-60 flex flex-col gap-1 transition-all shadow-md ${
                       isSelected ? 'border-green-500 shadow-[0_0_12px_rgba(16,185,129,0.3)] bg-gray-900' : 'border-[#333] hover:border-gray-600'
                     }`}

@@ -509,12 +509,13 @@ export const migrateLocalStorageToSupabase = async (userId: string) => {
 /** Map DB deployment row to UI SimulatedDeployment. */
 export function deploymentToSimulation(
   d: Deployment,
-  addressOverride?: string
+  addressOverride?: string,
+  txHashOverride?: string
 ): SimulatedDeployment {
   const chain = d.simulated_chain;
   return {
     network: d.network,
-    transactionHash: d.tx_hash || '',
+    transactionHash: txHashOverride ?? d.tx_hash ?? '',
     contractAddress: addressOverride ?? d.contract_address ?? '',
     status: (d.status as SimulatedDeployment['status']) || 'confirmed',
     gasUsed: d.gas_used || 0,

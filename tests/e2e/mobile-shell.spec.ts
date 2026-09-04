@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
 
+const SMOKE_EMAIL = process.env.SMOKE_EMAIL;
+const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD;
+if (!SMOKE_EMAIL || !SMOKE_PASSWORD) {
+  throw new Error('SMOKE_EMAIL and SMOKE_PASSWORD must be set (see .env.example)');
+}
+
 // ─── Shared login helper ────────────────────────────────────────────────────
 async function loginAndWait(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
@@ -10,8 +16,8 @@ async function loginAndWait(page: import('@playwright/test').Page) {
 
   const loginBtn = page.getByRole('button', { name: 'Sign In To Console' });
   if (await loginBtn.isVisible().catch(() => false)) {
-    await page.getByPlaceholder('name@company.com').fill(process.env.SMOKE_EMAIL || 'codeemail001@gmail.com');
-    await page.getByPlaceholder('••••••••').fill(process.env.SMOKE_PASSWORD || 'Assassin@01');
+    await page.getByPlaceholder('name@company.com').fill(SMOKE_EMAIL);
+    await page.getByPlaceholder('••••••••').fill(SMOKE_PASSWORD);
     await loginBtn.click();
     // Wait for auth redirect and initial render to settle
     await page.waitForLoadState('networkidle');

@@ -2,9 +2,9 @@ name: Playwright Smoke Tests
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, ethonline-2026]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, ethonline-2026]
 
 jobs:
   smoke:
@@ -45,5 +45,6 @@ jobs:
           path: |
             docs/SMOKE_TEST_REPORT.md
             tests/e2e/smoke-results.json
-            test-results/
           retention-days: 14
+          # Do not upload test-results/ — Playwright traces often contain
+          # cleartext passwords, JWTs, and account metadata.

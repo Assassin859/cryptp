@@ -41,7 +41,7 @@ import {
   type DeploymentKind,
 } from '../utils/userData';
 import { rehydrateSandboxFromDb } from '../utils/sandboxRehydrate';
-import { parseConstructorArgsFromAbi } from '../utils/constructorArgs';
+import { parseConstructorArgsFromAbi, abiHasConstructorArgs } from '../utils/constructorArgs';
 import { compileWithHardhat, CompilationResult } from '../utils/hardhatCompiler';
 import { allTemplates, simpleStorageTemplate } from '../utils/contractTemplates';
 import { SimulatedDeployment } from '../types';
@@ -148,18 +148,25 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   const fileStateCache = useRef<Record<string, {
       compileResult: CompilationResult | null;
       securityReport: SecurityReport | null;
-      simulations: SimulatedDeployment[];
       hasCompiledInSession: boolean;
       activeCompileDeployment: SimulatedDeployment | null;
       lastCompiledSource: string | null;
   }>>({});
   const switchingFileRef = useRef(false);
-  const rehydrateInFlight = useRef(false);
+  const bootstrapInFlight = useRef(false);
+  const rehydrateGeneration = useRef(0);
+  const rehydrateChainRef = useRef(Promise.resolve());
   const lastCompilationId = useRef<string | null>(null);
   const lastCompiledSourceRef = useRef<string | null>(null);
   const prevCodeByFileRef = useRef<Record<string, string>>({});
 
-  const [activeDeployment, setActiveDeployment] = useState<{address: string, abi: any, network: string} | null>(null);
+  const [activeDeployment, setActiveDeployment] = useState<{
+    address: string;
+    abi: any;
+    network: string;
+    /** Source that produced this deployment's ABI (for interact freshness). */
+    sourceSnapshot?: string | null;
+  } | null>(null);
   const [compilerVersion, setCompilerVersion] = useState<string>('0.8.20');
   const [versionNotification, setVersionNotification] = useState<{message: string, type: 'info' | 'success'} | null>(null);
 
@@ -273,6 +280,9 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         setProjects(projectsWithFiles);
         if (projectsWithFiles.length > 0) {
           const mostRecent = projectsWithFiles[0];
+          if (didCreateStarterWorkspace) {
+            bootstrapInFlight.current = true;
+          }
           setCurrentProject(mostRecent);
           
           let activeCode = '';
@@ -285,6 +295,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
 
           // ✅ Bootstrap: only auto-compile/deploy for brand-new workspaces, not returning users
           if (didCreateStarterWorkspace) {
+            try {
             // compileWithHardhat is statically imported at the top
             const activeFileName = mostRecent.files?.[0]?.name || 'SimpleStorage.sol';
             const projectFilesMap = mostRecent.files?.map(f => ({ name: f.name, content: f.content }));
@@ -315,7 +326,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                 deployer: browserVM.getActiveAccount(),
                 timestamp: new Date().toISOString(),
                 blockNumber: await browserVM.getBlockNumber(),
-                isRealChain: false
+                isRealChain: false,
+                abi: result.abi as SimulatedDeployment['abi'],
               };
 
               await saveDeployment(userId, mostRecent.id, {
@@ -353,7 +365,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                   deployer: browserVM.getActiveAccount(),
                   timestamp: new Date().toISOString(),
                   blockNumber: await browserVM.getBlockNumber(),
-                  isRealChain: false
+                  isRealChain: false,
+                  abi: result.abi as SimulatedDeployment['abi'],
                 };
 
                 // Save the execution transaction in deployments
@@ -408,6 +421,9 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                 setActiveBottomTab('output');
               }
             }
+            } finally {
+              bootstrapInFlight.current = false;
+            }
           }
         }
       } catch (error) { console.error('Failed to load user data:', error); } finally { setIsLoadingProjects(false); }
@@ -420,62 +436,83 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   useEffect(() => {
     if (!currentProject || !userId) return;
 
-    const loadAndRehydrate = async () => {
-      if (rehydrateInFlight.current) return;
-      rehydrateInFlight.current = true;
+    const projectId = currentProject.id;
+    const generation = ++rehydrateGeneration.current;
+
+    const applyRehydrateResult = (
+      rehydrated: SimulatedDeployment[],
+      restoredProfiler: Awaited<ReturnType<typeof rehydrateSandboxFromDb>>['profilerData'],
+      errors: string[]
+    ) => {
+      if (generation !== rehydrateGeneration.current) return;
+
+      if (errors.length > 0) {
+        console.warn('[Sandbox] Rehydrate partial failures:', errors);
+      }
+
+      setSimulations(rehydrated);
+
+      const latestDeploy = rehydrated.find(
+        (s) => s.network === 'Local Simulation' && !s.isRealChain
+      );
+      if (latestDeploy) {
+        setActiveDeployment({
+          address: latestDeploy.contractAddress,
+          abi: latestDeploy.abi || [],
+          network: latestDeploy.network,
+        });
+      } else if (rehydrated.length > 0) {
+        const latest = rehydrated[0];
+        setActiveDeployment({
+          address: latest.contractAddress,
+          abi: latest.abi || [],
+          network: latest.network,
+        });
+      } else {
+        setActiveDeployment(null);
+      }
+
+      if (restoredProfiler) {
+        setProfilerData((prev) => ({
+          ...prev,
+          lineGasMap: restoredProfiler.lineGasMap,
+          totalGas: restoredProfiler.totalGas,
+          quality: restoredProfiler.quality,
+          unmappedGas: restoredProfiler.unmappedGas,
+          traceTree: restoredProfiler.traceTree ?? prev.traceTree,
+        }));
+      }
+    };
+
+    rehydrateChainRef.current = rehydrateChainRef.current.then(async () => {
+      // Wait for starter bootstrap instead of skipping forever (project-switch race).
+      const waitDeadline = Date.now() + 120_000;
+      while (bootstrapInFlight.current) {
+        if (generation !== rehydrateGeneration.current) return;
+        if (Date.now() > waitDeadline) {
+          console.warn('[Sandbox] Bootstrap wait timed out; proceeding with rehydrate');
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      if (generation !== rehydrateGeneration.current) return;
+
       try {
         const { simulations: rehydrated, profilerData: restoredProfiler, errors } =
-          await rehydrateSandboxFromDb(userId, currentProject.id);
-
-        if (errors.length > 0) {
-          console.warn('[Sandbox] Rehydrate partial failures:', errors);
-        }
-
-        setSimulations(rehydrated);
-
-        const latestDeploy = rehydrated.find(
-          (s) => s.network === 'Local Simulation' && !s.isRealChain
-        );
-        if (latestDeploy) {
-          setActiveDeployment({
-            address: latestDeploy.contractAddress,
-            abi: latestDeploy.abi || compileResult?.abi || [],
-            network: latestDeploy.network,
-          });
-        } else if (rehydrated.length > 0) {
-          const latest = rehydrated[0];
-          setActiveDeployment({
-            address: latest.contractAddress,
-            abi: latest.abi || [],
-            network: latest.network,
-          });
-        } else {
-          setActiveDeployment(null);
-        }
-
-        if (restoredProfiler) {
-          setProfilerData((prev) => ({
-            ...prev,
-            lineGasMap: restoredProfiler.lineGasMap,
-            totalGas: restoredProfiler.totalGas,
-            quality: restoredProfiler.quality,
-            unmappedGas: restoredProfiler.unmappedGas,
-          }));
-        }
+          await rehydrateSandboxFromDb(userId, projectId);
+        applyRehydrateResult(rehydrated, restoredProfiler, errors);
       } catch (e) {
+        if (generation !== rehydrateGeneration.current) return;
         console.error('Failed to load/rehydrate deployments:', e);
         try {
-          const savedDeployments = await getDeployments(userId, currentProject.id);
+          const savedDeployments = await getDeployments(userId, projectId);
+          if (generation !== rehydrateGeneration.current) return;
           setSimulations(savedDeployments.map((d) => deploymentToSimulation(d)));
         } catch (fallbackErr) {
           console.error('Fallback deployment load failed:', fallbackErr);
         }
-      } finally {
-        rehydrateInFlight.current = false;
       }
-    };
-
-    loadAndRehydrate();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id, userId]);
 
@@ -514,24 +551,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFileId, currentProject?.id, userId, isLoadingProjects, code]);
 
-  // Sync activeDeployment ABI with compilation result if activeDeployment lacks ABI
-  useEffect(() => {
-    if (
-      compileResult?.success &&
-      compileResult.abi &&
-      compileResult.abi.length > 0 &&
-      activeDeployment &&
-      (!activeDeployment.abi || activeDeployment.abi.length === 0)
-    ) {
-      setActiveDeployment((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          abi: compileResult.abi,
-        };
-      });
-    }
-  }, [compileResult, activeDeployment]);
+  // Do not pair a fresh compile ABI with a prior deployment address (H-D).
+  // Interact always uses the ABI stored on the deployment itself.
 
   useEffect(() => {
     if (code === undefined || isLoadingProjects || !activeFileId) return;
@@ -551,14 +572,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         if (cached) {
             setCompileResult(cached.compileResult);
             setSecurityReport(cached.securityReport);
-            setSimulations(cached.simulations);
             setHasCompiledInSession(cached.hasCompiledInSession);
             setActiveCompileDeployment(cached.activeCompileDeployment || null);
             lastCompiledSourceRef.current = cached.lastCompiledSource ?? null;
         } else {
             setCompileResult(null);
             setSecurityReport(null);
-            setSimulations([]);
             setHasCompiledInSession(false);
             setActiveCompileDeployment(null);
             lastCompiledSourceRef.current = null;
@@ -686,9 +705,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       alert("No successful compilation found to deploy.");
       return;
     }
+    if (abiHasConstructorArgs(compileResult.abi as unknown[] | undefined)) {
+      alert(
+        "This contract requires constructor arguments. Open the Output panel, fill Constructor Arguments, and deploy from there."
+      );
+      return;
+    }
     
     try {
-       // browserVM is statically imported at the top
        const result = await browserVM.deployContract(compileResult.bytecode);
        
        const newSim: SimulatedDeployment = {
@@ -700,7 +724,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
          deployer: browserVM.getActiveAccount(),
          timestamp: new Date().toISOString(),
          blockNumber: await browserVM.getBlockNumber(),
-         isRealChain: false
+         isRealChain: false,
+         abi: compileResult.abi as SimulatedDeployment['abi'],
        };
        
        addSimulation(newSim, {
@@ -711,6 +736,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
        });
     } catch (e: any) {
        console.error("AI Deployment failed", e);
+       alert(e?.message || String(e) || "AI deployment failed");
     }
   };
 
@@ -748,9 +774,18 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     entry: SimulatedDeployment,
     extra: Partial<SaveDeploymentPayload> = {}
   ) => {
-    setSimulations(prev => [entry, ...prev]);
-    persistDeployment(entry, extra).catch(console.error);
-    setActiveDeployment({ address: entry.contractAddress, abi: compileResult?.abi || entry.abi || [], network: entry.network });
+    const withAbi: SimulatedDeployment = {
+      ...entry,
+      abi: entry.abi || (compileResult?.abi as SimulatedDeployment['abi']) || [],
+    };
+    setSimulations(prev => [withAbi, ...prev]);
+    persistDeployment(withAbi, extra).catch(console.error);
+    setActiveDeployment({
+      address: withAbi.contractAddress,
+      abi: withAbi.abi || [],
+      network: withAbi.network,
+      sourceSnapshot: lastCompiledSourceRef.current ?? undefined,
+    });
     setActiveActivity('interact');
     setShowSideBar(true);
   };
@@ -839,7 +874,6 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
        fileStateCache.current[activeFileId] = {
            compileResult,
            securityReport,
-           simulations,
            hasCompiledInSession,
            activeCompileDeployment,
            lastCompiledSource: lastCompiledSourceRef.current,
@@ -850,6 +884,10 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
      
      setActiveFileId(file.id);
      setCode(file.content);
+     updateProject(projectId, { active_file_id: file.id }).catch(console.error);
+     setProjects(prev => prev.map(p =>
+       p.id === projectId ? { ...p, active_file_id: file.id } : p
+     ));
      const project = projects.find(p => p.id === projectId);
      if (project) setCurrentProject(project);
   };
@@ -875,9 +913,10 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     
     try {
       const file = await createFile(userId, workspaceId, finalName, content);
-      setProjects(prev => prev.map(p => p.id === workspaceId ? { ...p, files: [...(p.files || []), file] } : p));
+      setProjects(prev => prev.map(p => p.id === workspaceId ? { ...p, files: [...(p.files || []), file], active_file_id: file.id } : p));
       setActiveFileId(file.id);
       setCode(file.content);
+      updateProject(workspaceId, { active_file_id: file.id }).catch(console.error);
       setShowAddFileModal(false);
       setAddFileContext(null);
     } catch (e: any) { 
@@ -987,9 +1026,27 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     const project = projects.find(p => p.id === workspaceId);
     if (!project) return;
 
+    const MAX_ZIP_BYTES = 5 * 1024 * 1024;
+    const MAX_ENTRY_BYTES = 512 * 1024;
+    const MAX_ENTRIES = 200;
+
+    const sanitizeZipPath = (filePath: string): string | null => {
+      const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+      if (!normalized || normalized.endsWith('/')) return null;
+      if (normalized.includes('..') || normalized.includes('\0')) return null;
+      if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('//')) return null;
+      if (normalized.length > 260) return null;
+      return normalized;
+    };
+
     try {
       const { unzip, strFromU8 } = await import('fflate');
       const zipFile = files[0];
+      if (zipFile.size > MAX_ZIP_BYTES) {
+        alert(`ZIP too large (max ${MAX_ZIP_BYTES / (1024 * 1024)} MB).`);
+        e.target.value = '';
+        return;
+      }
       const arrayBuffer = await zipFile.arrayBuffer();
       const zipBytes = new Uint8Array(arrayBuffer);
 
@@ -1003,19 +1060,33 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         let importedCount = 0;
         const newFiles: ContractFile[] = [];
 
-        // Loop through all unzipped entries
         const entries = Object.entries(unzipped);
+        if (entries.length > MAX_ENTRIES * 2) {
+          alert(`ZIP has too many entries (max ${MAX_ENTRIES} files).`);
+          return;
+        }
+
         for (const [filePath, fileData] of entries) {
-          // Skip folders (fflate represents folders as trailing slash entries or empty data)
           if (filePath.endsWith('/') || fileData.length === 0) continue;
+          if (importedCount >= MAX_ENTRIES) break;
+          if (fileData.length > MAX_ENTRY_BYTES) {
+            console.warn(`Skipped oversized entry: ${filePath}`);
+            continue;
+          }
+
+          const safePath = sanitizeZipPath(filePath);
+          if (!safePath) {
+            console.warn(`Skipped unsafe path: ${filePath}`);
+            continue;
+          }
 
           try {
             const content = strFromU8(fileData);
-            const created = await createFile(userId, workspaceId, filePath, content);
+            const created = await createFile(userId, workspaceId, safePath, content);
             newFiles.push(created);
             importedCount++;
           } catch (err) {
-            console.warn(`Skipped ${filePath}:`, err);
+            console.warn(`Skipped ${safePath}:`, err);
           }
         }
 
@@ -1305,6 +1376,17 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       isDangerous: false,
       onConfirm: async () => {
         try {
+          if (abiHasConstructorArgs(compileResult!.abi as unknown[] | undefined)) {
+            setConfirmModal({
+              title: 'Constructor Arguments Required',
+              message:
+                'This contract has constructor parameters. Fill them in the Output panel and deploy from there (or provide args before promoting).',
+              confirmLabel: 'OK',
+              isDangerous: false,
+              onConfirm: () => {},
+            });
+            return;
+          }
           const processedArgs = compileResult!.abi
             ? parseConstructorArgsFromAbi(compileResult!.abi, {})
             : [];
@@ -1325,7 +1407,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             deployer: account || '',
             timestamp: new Date().toISOString(),
             blockNumber: receipt?.blockNumber || 0,
-            isRealChain: true
+            isRealChain: true,
+            abi: compileResult!.abi as SimulatedDeployment['abi'],
           };
           addSimulation(promotedEntry, {
             deployment_kind: 'promoted',
@@ -1529,13 +1612,13 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                     onPreview={handlePreviewContract}
                   />
                 )}
-                {activeActivity === 'chain' && <SimulatedChain deployments={simulations} onReset={() => setShowResetConfirm(true)} onPromote={handlePromoteContract} onInteract={(d) => { setActiveDeployment({ address: d.contractAddress, abi: d.abi || compileResult?.abi || [], network: d.network }); setActiveActivity('interact'); }} />}
+                {activeActivity === 'chain' && <SimulatedChain deployments={simulations} onReset={() => setShowResetConfirm(true)} onPromote={handlePromoteContract} onInteract={(d) => { setActiveDeployment({ address: d.contractAddress, abi: d.abi || [], network: d.network, sourceSnapshot: lastCompiledSourceRef.current ?? undefined }); setActiveActivity('interact'); }} />}
                 {activeActivity === 'interact' && activeDeployment ? (
                   <ContractInteraction 
                     abi={activeDeployment.abi} 
                     address={activeDeployment.address} 
                     network={activeDeployment.network}
-                    canInteract={hasCompiledInSession && compileResult?.success === true}
+                    canInteract={Array.isArray(activeDeployment.abi) && activeDeployment.abi.length > 0}
                     onRefreshSimulations={() => {}} 
                     onTransactionExecuted={handleTransactionExecuted}
                     onQueryAI={handleAIQuery}

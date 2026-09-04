@@ -78,7 +78,8 @@ export const generateTokenCode = (options: TokenOptions): string => {
 
       if (features.votes) {
         imports.push('import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";');
-        inheritances.push('ERC20Votes');
+        imports.push('import "@openzeppelin/contracts/utils/Nonces.sol";');
+        inheritances.push('ERC20Votes', 'Nonces');
         // Votes requires Permit in OZ 5.x
         if (!features.permit) {
           imports.push('import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";');
@@ -114,6 +115,9 @@ export const generateTokenCode = (options: TokenOptions): string => {
       if (features.pausable) {
         imports.push('import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";');
         inheritances.push('ERC721Pausable');
+      }
+      if (features.mintable) {
+        stateVariables.push('uint256 private _nextTokenId;');
       }
       break;
 
@@ -173,10 +177,10 @@ export const generateTokenCode = (options: TokenOptions): string => {
       events.push('event AssetMinted(address indexed to, uint256 tokenId, string uri);');
       functions.push(`
     function safeMint(address _to, string memory _uri) public ${modifier} {
-        uint256 _tokenId = _nextTokenId();
-        _safeMint(_to, _tokenId);
-        ${features.uriStorage ? '_setTokenURI(_tokenId, _uri);' : ''}
-        emit AssetMinted(_to, _tokenId, _uri);
+        uint256 tokenId = _nextTokenId++;
+        _safeMint(_to, tokenId);
+        ${features.uriStorage ? '_setTokenURI(tokenId, _uri);' : ''}
+        emit AssetMinted(_to, tokenId, _uri);
     }`);
     } else if (type === 'ERC721A') {
       functions.push(`

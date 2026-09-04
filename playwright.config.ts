@@ -17,7 +17,8 @@ export default defineConfig({
   reporter: [['list'], ['json', { outputFile: 'tests/e2e/smoke-results.json' }]],
   use: {
     baseURL: process.env.SMOKE_BASE_URL || 'http://localhost:5173',
-    trace: 'retain-on-failure',
+    // Never retain traces in CI — they embed passwords/JWTs from login flows.
+    trace: process.env.CI ? 'off' : 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
   },

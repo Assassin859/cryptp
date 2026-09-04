@@ -20,7 +20,8 @@ export function getSupabase(): SupabaseClient {
       import.meta.env.VITE_SUPABASE_ANON_KEY,
       {
         auth: {
-          persistSession: false,
+          // Keep IDE sessions across refresh (avoid feeling like a full reset).
+          persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: true,
         },

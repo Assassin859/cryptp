@@ -5,7 +5,7 @@ import { Play, Search, Zap, Activity, AlertCircle, Info, User, RefreshCw, Chevro
 import { Interface, Result, Contract, parseEther, formatUnits, parseUnits } from 'ethers';
 import { browserVM, EventLog, GasReport } from '../utils/browserVM';
 import { useWeb3 } from '../context/Web3Context';
-import { isAbiFunction, asAbiArray, type AbiFragment } from '../types/abi';
+import { isAbiFunction, asAbiArray, abiFunctionKey, isReadFunction, type AbiFragment } from '../types/abi';
 import { getErrorMessage } from '../utils/errorMessage';
 
 
@@ -13,6 +13,7 @@ interface ContractInteractionProps {
   abi: unknown[];
   address: string;
   network: string;
+  /** When false, sandbox writes/reads are blocked (stale compile or ABI/deploy mismatch). */
   canInteract?: boolean;
   onRefreshSimulations?: () => void;
   onTransactionExecuted?: (payload: {
@@ -36,7 +37,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
   onQueryAI
 }) => {
   const { signer, isConnected } = useWeb3();
-  type CallableAbi = AbiFragment & { type: 'function'; name: string; stateMutability?: string; inputs?: { name?: string; type: string }[] };
+  type CallableAbi = AbiFragment & { type: 'function'; name: string; stateMutability?: string; constant?: boolean; inputs?: { name?: string; type: string }[] };
   const [readFunctions, setReadFunctions] = useState<CallableAbi[]>([]);
   const [writeFunctions, setWriteFunctions] = useState<CallableAbi[]>([]);
   const [expandedFunctions, setExpandedFunctions] = useState<{ [key: string]: boolean }>({});
@@ -64,20 +65,16 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
     if (!abi) return;
 
     const abiList = asAbiArray(abi);
-    const read = abiList.filter(isAbiFunction).filter(
-      (item) => item.stateMutability === 'view' || item.stateMutability === 'pure'
-    ) as CallableAbi[];
-    const write = abiList.filter(isAbiFunction).filter(
-      (item) => item.stateMutability !== 'view' && item.stateMutability !== 'pure'
-    ) as CallableAbi[];
+    const callable = abiList.filter(isAbiFunction) as CallableAbi[];
+    const read = callable.filter(isReadFunction);
+    const write = callable.filter((item) => !isReadFunction(item));
 
     setReadFunctions(read);
     setWriteFunctions(write);
 
-    // Initialize expanded state for first few functions
     const initialExpanded: { [key: string]: boolean } = {};
-    read.slice(0, 3).forEach(f => { initialExpanded[f.name] = true; });
-    write.slice(0, 3).forEach(f => { initialExpanded[f.name] = true; });
+    read.slice(0, 3).forEach(f => { initialExpanded[abiFunctionKey(f)] = true; });
+    write.slice(0, 3).forEach(f => { initialExpanded[abiFunctionKey(f)] = true; });
     setExpandedFunctions(initialExpanded);
 
     if (network === 'Local Simulation') {
@@ -92,21 +89,21 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
       }
   };
 
-  const toggleExpand = (name: string) => {
-    setExpandedFunctions(prev => ({ ...prev, [name]: !prev[name] }));
+  const toggleExpand = (key: string) => {
+    setExpandedFunctions(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleInputChange = (funcName: string, argName: string, value: string) => {
+  const handleInputChange = (funcKey: string, argName: string, value: string) => {
     setInputs(prev => ({
       ...prev,
-      [funcName]: { ...(prev[funcName] || {}), [argName]: value }
+      [funcKey]: { ...(prev[funcKey] || {}), [argName]: value }
     }));
   };
 
-  const handleInputUnitChange = (funcName: string, argName: string, unit: 'wei' | 'gwei' | 'ether') => {
+  const handleInputUnitChange = (funcKey: string, argName: string, unit: 'wei' | 'gwei' | 'ether') => {
     setInputUnits(prev => ({
       ...prev,
-      [funcName]: { ...(prev[funcName] || {}), [argName]: unit }
+      [funcKey]: { ...(prev[funcKey] || {}), [argName]: unit }
     }));
   };
 
@@ -117,66 +114,76 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
   };
 
   const executeFunction = async (func: CallableAbi, isRead: boolean) => {
-    const funcName = func.name;
+    const funcKey = abiFunctionKey(func);
     const funcInputs = func.inputs ?? [];
 
-    if (!canInteract && network === 'Local Simulation') {
+    if (!canInteract) {
       setResults(prev => ({
         ...prev,
-        [funcName]: {
-          error: 'Source changed since last compile. Recompile before interacting.',
+        [funcKey]: {
+          error: 'No ABI bound to this deployment. Redeploy after a successful compile.',
           loading: false,
         },
       }));
       return;
     }
 
-    setResults(prev => ({ ...prev, [funcName]: { loading: true } }));
+    setResults(prev => ({ ...prev, [funcKey]: { loading: true } }));
 
     try {
       const iface = new Interface(asAbiArray(abi));
-      const argValues = funcInputs.map((input) => inputs[funcName]?.[input.name ?? ''] || '');
+      const argValues = funcInputs.map((input, index) => {
+        const argKey = input.name && input.name.length > 0 ? input.name : `arg_${index}`;
+        return inputs[funcKey]?.[argKey] || '';
+      });
 
-      for (const input of funcInputs) {
-        const val = inputs[funcName]?.[input.name ?? ''];
+      // Allow zero-arg calls (e.g. getValue()) without a form value.
+      for (let i = 0; i < funcInputs.length; i++) {
+        const input = funcInputs[i];
+        const argKey = input.name && input.name.length > 0 ? input.name : `arg_${i}`;
+        const val = inputs[funcKey]?.[argKey];
         if (val === undefined || val.trim() === '') {
-          throw new Error(`Missing required argument: ${input.name || input.type}`);
+          throw new Error(`Missing required argument: ${argKey} (${input.type})`);
         }
       }
       
       const processedArgs = funcInputs.map((input, index: number) => {
         const val = argValues[index];
+        const argKey = input.name && input.name.length > 0 ? input.name : `arg_${index}`;
 
         if (input.type.includes('uint') || input.type.includes('int')) {
-          const unit = inputUnits[funcName]?.[input.name ?? ''] || 'wei';
+          const unit = inputUnits[funcKey]?.[argKey] || 'wei';
           try {
             if (unit === 'ether') return parseUnits(val, 18);
             if (unit === 'gwei') return parseUnits(val, 9);
             return BigInt(val);
           } catch {
-            return BigInt(0);
+            throw new Error(`Invalid integer for ${argKey}: "${val}"`);
           }
         }
         if (input.type === 'bool') {
-          return val.toLowerCase() === 'true';
+          const lower = val.toLowerCase();
+          if (lower !== 'true' && lower !== 'false') {
+            throw new Error(`Invalid bool for ${argKey}: "${val}"`);
+          }
+          return lower === 'true';
         }
 
         if (input.type.includes('[]') || input.type.startsWith('bytes') || input.type.includes('tuple')) {
            try {
               return JSON.parse(val);
            } catch {
-              return val;
+              throw new Error(`Invalid JSON for ${argKey}: "${val}"`);
            }
         }
 
         return val;
       });
 
-      const data = iface.encodeFunctionData(funcName, processedArgs);
+      // Prefer the exact fragment so overloaded functions encode correctly.
+      const data = iface.encodeFunctionData(func as never, processedArgs);
 
       if (network === 'Local Simulation') {
-        // browserVM is statically imported at the top
-        
         if (isRead) {
           const { returnValue, gasUsed } = await browserVM.runCall(address, data);
           
@@ -184,27 +191,27 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             throw new Error("Empty return data (0x). This usually means the contract is not deployed at this address, or the function has no return value but the ABI expects one.");
           }
 
-          const decoded = iface.decodeFunctionResult(funcName, returnValue);
+          const decoded = iface.decodeFunctionResult(func as never, returnValue);
           const rawValue = decoded.length === 1 ? decoded[0] : decoded;
 
           setResults(prev => ({ 
             ...prev, 
-            [funcName]: { 
-              output: formatOutput(decoded, prev[funcName]?.unit || 'wei'), 
+            [funcKey]: { 
+              output: formatOutput(decoded, prev[funcKey]?.unit || 'wei'), 
               rawValue: rawValue,
-              unit: prev[funcName]?.unit || 'wei',
+              unit: prev[funcKey]?.unit || 'wei',
               loading: false,
               gasReport: { total: gasUsed, execution: gasUsed, intrinsic: 0 } 
             } 
           }));
         } else {
-          const ethValue = inputs[funcName]?._value || '0';
+          const ethValue = inputs[funcKey]?._value || '0';
           const weiValue = parseEther(ethValue || '0');
           const safeGasLimit = clampGasLimit(txGasLimit);
           const { transactionHash, gasReport, logs } = await browserVM.sendTransaction(address, data, weiValue, safeGasLimit);
           setResults(prev => ({ 
             ...prev, 
-            [funcName]: { txHash: transactionHash, gasReport, logs, loading: false } 
+            [funcKey]: { txHash: transactionHash, gasReport, logs, loading: false } 
           }));
           if (onRefreshSimulations) onRefreshSimulations();
           if (onTransactionExecuted) {
@@ -220,7 +227,6 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         }
 
       } else {
-        // Real chain interaction logic (Metamask)
         if (!isConnected || !signer) {
           throw new Error('Please connect your wallet to interact with this contract on a real network.');
         }
@@ -228,41 +234,56 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         const contract = new Contract(address, asAbiArray(abi), signer);
         
         if (isRead) {
-          const result = await contract[funcName](...processedArgs);
+          const result = await contract.getFunction(funcKey)(...processedArgs);
           setResults(prev => ({ 
             ...prev, 
-            [funcName]: { 
-              output: formatOutput([result] as Result, prev[funcName]?.unit || 'wei'), 
+            [funcKey]: { 
+              output: formatOutput([result] as Result, prev[funcKey]?.unit || 'wei'), 
               rawValue: result,
-              unit: prev[funcName]?.unit || 'wei',
+              unit: prev[funcKey]?.unit || 'wei',
               loading: false 
             } 
           }));
         } else {
-          const ethValue = inputs[funcName]?._value || '0';
+          const ethValue = inputs[funcKey]?._value || '0';
           const weiValue = parseEther(ethValue || '0');
-          const tx = await contract[funcName](...processedArgs, { value: weiValue });
+          const safeGasLimit = clampGasLimit(txGasLimit);
+          const tx = await contract.getFunction(funcKey)(...processedArgs, {
+            value: weiValue,
+            gasLimit: safeGasLimit,
+          });
           setResults(prev => ({ 
             ...prev, 
-            [funcName]: { txHash: tx.hash, loading: true } 
+            [funcKey]: { txHash: tx.hash, loading: true } 
           }));
           
           const receipt = await tx.wait();
+          const gasUsed = Number(receipt.gasUsed);
           setResults(prev => ({ 
             ...prev, 
-            [funcName]: { 
+            [funcKey]: { 
               txHash: tx.hash, 
               loading: false,
-              gasReport: { total: Number(receipt.gasUsed), execution: Number(receipt.gasUsed), intrinsic: 0 }
+              gasReport: { total: gasUsed, execution: gasUsed, intrinsic: 0 }
             } 
           }));
+          if (onTransactionExecuted) {
+            onTransactionExecuted({
+              txHash: tx.hash,
+              callData: data,
+              contractAddress: address,
+              gasUsed,
+              callValueWei: weiValue.toString(),
+              gasLimit: safeGasLimit,
+            });
+          }
         }
       }
     } catch (err: unknown) {
       console.error('Execution Error:', err);
       setResults(prev => ({ 
         ...prev, 
-        [funcName]: { error: getErrorMessage(err), loading: false } 
+        [funcKey]: { error: getErrorMessage(err), loading: false } 
       }));
     }
   };
@@ -284,14 +305,13 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
     2);
   };
 
-  const handleUnitChange = (funcName: string, unit: 'wei' | 'gwei' | 'ether') => {
+  const handleUnitChange = (funcKey: string, unit: 'wei' | 'gwei' | 'ether') => {
     setResults(prev => {
-      const res = prev[funcName];
+      const res = prev[funcKey];
       if (!res || res.rawValue === undefined) return prev;
-      
       return {
         ...prev,
-        [funcName]: {
+        [funcKey]: {
           ...res,
           unit,
           output: formatOutput((Array.isArray(res.rawValue) ? res.rawValue : [res.rawValue]) as Result, unit)
@@ -301,14 +321,15 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
   };
 
   const renderFunction = (func: CallableAbi, isRead: boolean) => {
+    const funcKey = abiFunctionKey(func);
     const funcInputs = func.inputs ?? [];
-    const isExpanded = expandedFunctions[func.name];
-    const result = results[func.name];
+    const isExpanded = expandedFunctions[funcKey];
+    const result = results[funcKey];
 
     return (
-      <div key={func.name} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden mb-3 hover:border-gray-600 transition-colors shadow-sm">
+      <div key={funcKey} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden mb-3 hover:border-gray-600 transition-colors shadow-sm">
         <button 
-          onClick={() => toggleExpand(func.name)}
+          onClick={() => toggleExpand(funcKey)}
           className="w-full px-4 py-3 flex items-center justify-between text-left group"
         >
           <div className="flex items-center gap-2">
@@ -322,20 +343,22 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           <div className="px-4 pb-4 border-t border-gray-700/50 pt-3 space-y-3">
             {funcInputs.length > 0 && (
               <div className="space-y-2">
-                {funcInputs.map((input) => (
-                  <div key={input.name ?? input.type} className="flex flex-col gap-1">
+                {funcInputs.map((input, index) => {
+                  const argKey = input.name && input.name.length > 0 ? input.name : `arg_${index}`;
+                  return (
+                  <div key={`${funcKey}-${argKey}`} className="flex flex-col gap-1">
                     <div className="flex items-center justify-between ml-1">
                       <label className="text-[10px] text-gray-400 font-mono">
-                        {input.name} ({input.type})
+                        {input.name || argKey} ({input.type})
                       </label>
                       {(input.type.includes('uint') || input.type.includes('int')) && (
                         <div className="flex gap-1">
                           {['wei', 'gwei', 'ether'].map((u) => (
                             <button
                               key={u}
-                              onClick={() => handleInputUnitChange(func.name, input.name ?? '', u as 'wei' | 'gwei' | 'ether')}
+                              onClick={() => handleInputUnitChange(funcKey, argKey, u as 'wei' | 'gwei' | 'ether')}
                               className={`text-[7px] px-1 rounded border uppercase font-bold transition-colors ${
-                                (inputUnits[func.name]?.[input.name ?? ''] || 'wei') === u 
+                                (inputUnits[funcKey]?.[argKey] || 'wei') === u 
                                   ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
                                   : 'bg-gray-950 border-gray-800 text-gray-600 hover:text-gray-400'
                               }`}
@@ -349,12 +372,13 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                     <input
                       type="text"
                       placeholder={input.type}
-                      value={inputs[func.name]?.[input.name ?? ''] || ''}
-                      onChange={(e) => handleInputChange(func.name, input.name ?? '', e.target.value)}
+                      value={inputs[funcKey]?.[argKey] || ''}
+                      onChange={(e) => handleInputChange(funcKey, argKey, e.target.value)}
                       className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500 font-mono"
                     />
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -368,8 +392,8 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                     type="number"
                     step="any"
                     placeholder="0.0"
-                    value={inputs[func.name]?._value || ''}
-                    onChange={(e) => handleInputChange(func.name, '_value', e.target.value)}
+                    value={inputs[funcKey]?._value || ''}
+                    onChange={(e) => handleInputChange(funcKey, '_value', e.target.value)}
                     className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs text-yellow-300 focus:outline-none focus:border-yellow-500 font-mono"
                  />
               </div>
@@ -392,7 +416,6 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
 
             {result && !result.loading && (
               <div className="space-y-3 mt-3">
-                {/* Result/Error Display */}
                 <div className={`p-2 rounded text-xs font-mono break-all border ${
                   result.error 
                     ? 'bg-red-900/10 border-red-900/50 text-red-400' 
@@ -413,7 +436,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                             {['wei', 'gwei', 'ether'].map((u) => (
                               <button
                                 key={u}
-                                onClick={() => handleUnitChange(func.name, u as 'wei' | 'gwei' | 'ether')}
+                                onClick={() => handleUnitChange(funcKey, u as 'wei' | 'gwei' | 'ether')}
                                 className={`text-[8px] px-1 rounded border uppercase font-bold transition-colors ${
                                   result.unit === u 
                                     ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
@@ -437,11 +460,10 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                   )}
                 </div>
 
-                {/* Gas Analysis Component */}
                 {result.gasReport && (
                   <div className="bg-gray-900/50 border border-gray-700/50 rounded overflow-hidden">
                     <button 
-                      onClick={() => setShowGasDetail(prev => ({ ...prev, [func.name]: !prev[func.name] }))}
+                      onClick={() => setShowGasDetail(prev => ({ ...prev, [funcKey]: !prev[funcKey] }))}
                       className="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase hover:bg-gray-800 transition"
                     >
                       <div className="flex items-center justify-between flex-1 mr-4">
@@ -452,7 +474,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                         <div 
                           onClick={(e) => {
                             e.stopPropagation();
-                            onQueryAI?.(`Please help me optimize the gas usage for function "${func.name}" in contract "${address}". Recent gas used: ${result.gasReport?.total}. Execution: ${result.gasReport?.execution}. Intrinsic: ${result.gasReport?.intrinsic}. Highlight where the waste might be.`);
+                            onQueryAI?.(`Please help me optimize the gas usage for function "${func.name}" in contract "${address}". Recent gas used: ${result.gasReport?.total}.`);
                           }}
                           className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-[8px] text-blue-400 hover:bg-blue-500/20 flex items-center gap-1 transition-all pointer-events-auto"
                         >
@@ -460,9 +482,9 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                           Optimize with AI
                         </div>
                       </div>
-                      {showGasDetail[func.name] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      {showGasDetail[funcKey] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                     </button>
-                    {showGasDetail[func.name] && (
+                    {showGasDetail[funcKey] && (
                       <div className="px-3 py-2 border-t border-gray-700/30 space-y-2 animate-in slide-in-from-top-1 duration-200">
                         <div className="grid grid-cols-2 gap-2 text-[10px]">
                           <div className="bg-gray-950 p-1.5 rounded border border-gray-800">
@@ -489,7 +511,6 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                   </div>
                 )}
 
-                {/* Event Logs Component */}
                 {result.logs && result.logs.length > 0 && (
                   <div className="bg-gray-900/50 border border-gray-700/50 rounded overflow-hidden">
                     <div className="px-3 py-1.5 flex items-center gap-1.5 text-[10px] font-bold text-gray-500 uppercase border-b border-gray-700/30">

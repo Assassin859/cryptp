@@ -203,6 +203,8 @@ export const scanContract = (sourceCode: string): SecurityReport => {
     'pause', 'unpause', 'upgrade', 'initialize'
   ];
 
+  let parseFailed = false;
+
   try {
     let hasContract = false;
     const ast = parser.parse(sourceCode, { range: true, loc: true, tolerant: true });
@@ -554,7 +556,16 @@ export const scanContract = (sourceCode: string): SecurityReport => {
     }
 
   } catch (error) {
+    parseFailed = true;
     console.debug('[Forensic] Security scan skipped AST analysis (Syntax in flux):', error);
+    findings.push({
+      id: 'PARSE_ERROR',
+      title: 'Solidity Parse Error',
+      description: 'Source could not be parsed; security scan incomplete.',
+      severity: 'High' as Severity,
+      confidence: 'High' as Confidence,
+      recommendation: 'Fix syntax errors before trusting the security score.',
+    });
   }
 
   const hasCriticalReentrancy = findings.some(f => f.id === 'S001');
@@ -583,6 +594,7 @@ export const scanContract = (sourceCode: string): SecurityReport => {
   if (summary.medium > 0) activeCap = Math.min(activeCap, 75);
 
   score = Math.min(score, activeCap);
+  if (parseFailed) score = Math.min(score, 40);
   score = Math.max(0, score);
 
   return { score, findings, summary };

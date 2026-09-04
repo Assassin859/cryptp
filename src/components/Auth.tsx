@@ -106,7 +106,12 @@ const Auth: React.FC<AuthProps> = ({ onSignedIn }) => {
     await supabase.auth.signOut();
     if (typeof window !== 'undefined') {
       Object.keys(window.localStorage)
-        .filter(k => k.startsWith('cryptp-') && !k.endsWith('-keys') && !k.includes('new-user') && !k.includes('dismiss-link-modal'))
+        .filter(k =>
+          k.startsWith('cryptp-') &&
+          !k.includes('-keys') &&
+          !k.includes('new-user') &&
+          !k.includes('dismiss-link-modal')
+        )
         .forEach(k => window.localStorage.removeItem(k));
     }
     setLoading(false);

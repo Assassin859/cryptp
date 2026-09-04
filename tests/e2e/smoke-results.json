@@ -64,6 +64,282 @@
   },
   "suites": [
     {
+      "title": "ide-smoke.spec.ts",
+      "file": "ide-smoke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "CryptP IDE full smoke test",
+          "file": "ide-smoke.spec.ts",
+          "line": 88,
+          "column": 15,
+          "specs": [
+            {
+              "title": "checklist A–E and persistence",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 91012,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "✓ A1: PASS\n"
+                        },
+                        {
+                          "text": "✓ A2: PASS\n"
+                        },
+                        {
+                          "text": "✓ A3: PASS — Dismissed or not shown\n"
+                        },
+                        {
+                          "text": "✓ B1: PASS\n"
+                        },
+                        {
+                          "text": "✓ B2: PASS\n"
+                        },
+                        {
+                          "text": "✗ B3: FAIL — Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.view-lines')\nExpected substring: \u001b[32m\"smoke-marker\"\u001b[39m\nReceived string:    \u001b[31m\"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for locator('.view-lines')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-mprt=\"8\" aria-hidden=\"true\" role=\"presentation\" class=\"view-lines monaco-mouse-cursor-text\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[22m\n\n"
+                        },
+                        {
+                          "text": "✓ B4: PASS\n"
+                        },
+                        {
+                          "text": "○ B5: SKIP — Not automated; UI uses hidden file input\n"
+                        },
+                        {
+                          "text": "✓ C1: PASS\n"
+                        },
+                        {
+                          "text": "✓ C2: PASS\n"
+                        },
+                        {
+                          "text": "✓ C3: PASS\n"
+                        },
+                        {
+                          "text": "✓ C4: PASS — Assumed visible post-compile if scan ran\n"
+                        },
+                        {
+                          "text": "✓ C5: PASS\n"
+                        },
+                        {
+                          "text": "✓ D1: PASS\n"
+                        },
+                        {
+                          "text": "✓ D2: PASS — Section rendered if compile succeeded\n"
+                        },
+                        {
+                          "text": "✓ D3: PASS — PriceService loads or shows fallback\n"
+                        },
+                        {
+                          "text": "✓ E1: PASS\n"
+                        },
+                        {
+                          "text": "✓ E2: PASS\n"
+                        },
+                        {
+                          "text": "✓ E3: PASS\n"
+                        },
+                        {
+                          "text": "✓ E4: PASS\n"
+                        },
+                        {
+                          "text": "○ E5: SKIP — Skipped to preserve deployment state for later tests\n"
+                        },
+                        {
+                          "text": "✓ L1: PASS\n"
+                        },
+                        {
+                          "text": "✓ L2: PASS\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-31T19:15:52.113Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "55a5875346cb458eac15-5eb1710555cfa2873445",
+              "file": "ide-smoke.spec.ts",
+              "line": 105,
+              "column": 3
+            },
+            {
+              "title": "checklist F–A4",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 15897,
+                      "error": {
+                        "message": "Error: Checklist failures: B3 (Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.view-lines')\nExpected substring: \u001b[32m\"smoke-marker\"\u001b[39m\nReceived string:    \u001b[31m\"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for locator('.view-lines')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-mprt=\"8\" aria-hidden=\"true\" role=\"presentation\" class=\"view-lines monaco-mouse-cursor-text\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[22m\n)\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"B3\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+                        "stack": "Error: Checklist failures: B3 (Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.view-lines')\nExpected substring: \u001b[32m\"smoke-marker\"\u001b[39m\nReceived string:    \u001b[31m\"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for locator('.view-lines')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-mprt=\"8\" aria-hidden=\"true\" role=\"presentation\" class=\"view-lines monaco-mouse-cursor-text\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[22m\n)\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"B3\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at C:\\Users\\maitr\\Downloads\\cryptp\\tests\\e2e\\ide-smoke.spec.ts:613:7",
+                        "location": {
+                          "file": "C:\\Users\\maitr\\Downloads\\cryptp\\tests\\e2e\\ide-smoke.spec.ts",
+                          "column": 7,
+                          "line": 613
+                        },
+                        "snippet": "  611 |       defects.map((d) => d.id),\n  612 |       `Checklist failures: ${defects.map((d) => `${d.id} (${d.notes || d.steps})`).join('; ')}`\n> 613 |     ).toEqual([]);\n      |       ^\n  614 |   });\n  615 | });\n  616 |"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\maitr\\Downloads\\cryptp\\tests\\e2e\\ide-smoke.spec.ts",
+                            "column": 7,
+                            "line": 613
+                          },
+                          "message": "Error: Checklist failures: B3 (Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.view-lines')\nExpected substring: \u001b[32m\"smoke-marker\"\u001b[39m\nReceived string:    \u001b[31m\"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for locator('.view-lines')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-mprt=\"8\" aria-hidden=\"true\" role=\"presentation\" class=\"view-lines monaco-mouse-cursor-text\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;\"\u001b[22m\n)\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"B3\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  611 |       defects.map((d) => d.id),\n  612 |       `Checklist failures: ${defects.map((d) => `${d.id} (${d.notes || d.steps})`).join('; ')}`\n> 613 |     ).toEqual([]);\n      |       ^\n  614 |   });\n  615 | });\n  616 |\n    at C:\\Users\\maitr\\Downloads\\cryptp\\tests\\e2e\\ide-smoke.spec.ts:613:7"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "✓ F1: PASS\n"
+                        },
+                        {
+                          "text": "✓ F2: PASS\n"
+                        },
+                        {
+                          "text": "✓ G1: PASS — Prompts for API key\n"
+                        },
+                        {
+                          "text": "○ G2: SKIP — No keys in CI env\n"
+                        },
+                        {
+                          "text": "○ G3: SKIP — Not exercised in automation\n"
+                        },
+                        {
+                          "text": "○ G4: SKIP — Manual verification\n"
+                        },
+                        {
+                          "text": "✓ H1: PASS\n"
+                        },
+                        {
+                          "text": "○ H2: SKIP — Download not triggered in automation\n"
+                        },
+                        {
+                          "text": "✓ H3: PASS\n"
+                        },
+                        {
+                          "text": "⊘ I1: BLOCKED — No window.ethereum in Playwright Chromium\n"
+                        },
+                        {
+                          "text": "⊘ I2: BLOCKED — Requires MetaMask\n"
+                        },
+                        {
+                          "text": "⊘ I3: BLOCKED — Requires MetaMask extension\n"
+                        },
+                        {
+                          "text": "⊘ I4: BLOCKED — Requires MetaMask\n"
+                        },
+                        {
+                          "text": "✓ J1: PASS\n"
+                        },
+                        {
+                          "text": "○ J2: SKIP — Requires linked GitHub OAuth\n"
+                        },
+                        {
+                          "text": "○ J3: SKIP — Requires linked GitHub OAuth\n"
+                        },
+                        {
+                          "text": "✓ K1: PASS\n"
+                        },
+                        {
+                          "text": "✓ K2: PASS — Code review: uses securityReport.findings\n"
+                        },
+                        {
+                          "text": "✓ K3: PASS — SimulatedChain has retry UI per code review\n"
+                        },
+                        {
+                          "text": "✓ A4: PASS\n"
+                        },
+                        {
+                          "text": "🧹 Starting cleanup of Smoke_* workspaces...\n"
+                        },
+                        {
+                          "text": "Deleting workspace: Smoke_1788203752382\n"
+                        },
+                        {
+                          "text": "Deleting workspace: Smoke_1788203752382\n"
+                        },
+                        {
+                          "text": "🧹 Finished cleanup of Smoke_* workspaces.\n"
+                        },
+                        {
+                          "text": "\nReport written to C:\\Users\\maitr\\Downloads\\cryptp\\docs\\SMOKE_TEST_REPORT.md\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-08-31T19:17:23.401Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\maitr\\Downloads\\cryptp\\test-results\\ide-smoke-CryptP-IDE-full-smoke-test-checklist-F–A4-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\maitr\\Downloads\\cryptp\\test-results\\ide-smoke-CryptP-IDE-full-smoke-test-checklist-F–A4-chromium\\error-context.md"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\maitr\\Downloads\\cryptp\\test-results\\ide-smoke-CryptP-IDE-full-smoke-test-checklist-F–A4-chromium\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "C:\\Users\\maitr\\Downloads\\cryptp\\test-results\\ide-smoke-CryptP-IDE-full-smoke-test-checklist-F–A4-chromium\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\maitr\\Downloads\\cryptp\\tests\\e2e\\ide-smoke.spec.ts",
+                        "column": 7,
+                        "line": 613
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "55a5875346cb458eac15-770e1e0cece011048bc7",
+              "file": "ide-smoke.spec.ts",
+              "line": 492,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
       "title": "mobile-shell.spec.ts",
       "file": "mobile-shell.spec.ts",
       "column": 0,
@@ -73,7 +349,7 @@
         {
           "title": "CryptP Mobile-Safe Shell DOM test",
           "file": "mobile-shell.spec.ts",
-          "line": 35,
+          "line": 41,
           "column": 6,
           "specs": [
             {
@@ -89,10 +365,10 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": 1,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 25154,
+                      "duration": 5164,
                       "errors": [],
                       "stdout": [
                         {
@@ -101,7 +377,7 @@
                       ],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-07-01T04:14:12.343Z",
+                      "startTime": "2026-08-31T19:17:47.868Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -111,7 +387,7 @@
               ],
               "id": "caeeee52b686924bfcb1-68513160ea0e68279084",
               "file": "mobile-shell.spec.ts",
-              "line": 38,
+              "line": 44,
               "column": 3
             }
           ]
@@ -119,7 +395,7 @@
         {
           "title": "CryptP Bootstrap regression",
           "file": "mobile-shell.spec.ts",
-          "line": 80,
+          "line": 86,
           "column": 6,
           "specs": [
             {
@@ -135,19 +411,19 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": 1,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 21358,
+                      "duration": 19500,
                       "errors": [],
                       "stdout": [
                         {
-                          "text": "✅ Bootstrap regression: before=1, after=0 — no duplicate simulations.\n"
+                          "text": "✅ Bootstrap regression: before=3, after=0 — no duplicate simulations.\n"
                         }
                       ],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-07-01T04:14:39.811Z",
+                      "startTime": "2026-08-31T19:17:53.197Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -157,7 +433,7 @@
               ],
               "id": "caeeee52b686924bfcb1-55b9ddfe294e84e416ff",
               "file": "mobile-shell.spec.ts",
-              "line": 83,
+              "line": 89,
               "column": 3
             }
           ]
@@ -167,11 +443,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-07-01T04:14:10.328Z",
-    "duration": 52966.716,
-    "expected": 2,
+    "startTime": "2026-08-31T19:15:50.930Z",
+    "duration": 141976.71000000002,
+    "expected": 3,
     "skipped": 0,
-    "unexpected": 0,
+    "unexpected": 1,
     "flaky": 0
   }
 }

@@ -387,12 +387,15 @@ class BrowserVM {
       events.on('step', stepListener);
       events.on('beforeMessage', beforeMessageListener);
       events.on('afterMessage', afterMessageListener);
-      
-      const result = await this.evmInstance.runTx({ tx });
-      
-      events.removeListener('step', stepListener);
-      events.removeListener('beforeMessage', beforeMessageListener);
-      events.removeListener('afterMessage', afterMessageListener);
+
+      let result;
+      try {
+        result = await this.evmInstance.runTx({ tx });
+      } finally {
+        events.removeListener('step', stepListener);
+        events.removeListener('beforeMessage', beforeMessageListener);
+        events.removeListener('afterMessage', afterMessageListener);
+      }
 
       if (rootFrame) {
           trace.traceTree = rootFrame;
@@ -562,12 +565,15 @@ class BrowserVM {
         txEvents.on('step', stepListener);
         txEvents.on('beforeMessage', beforeMessageListener);
         txEvents.on('afterMessage', afterMessageListener);
-        
-        const result = await this.evmInstance.runTx({ tx });
-        
-        txEvents.removeListener('step', stepListener);
-        txEvents.removeListener('beforeMessage', beforeMessageListener);
-        txEvents.removeListener('afterMessage', afterMessageListener);
+
+        let result;
+        try {
+          result = await this.evmInstance.runTx({ tx });
+        } finally {
+          txEvents.removeListener('step', stepListener);
+          txEvents.removeListener('beforeMessage', beforeMessageListener);
+          txEvents.removeListener('afterMessage', afterMessageListener);
+        }
 
         if (rootFrame) {
             trace.traceTree = rootFrame;

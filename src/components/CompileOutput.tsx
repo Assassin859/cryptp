@@ -18,8 +18,8 @@ import {
 } from 'lucide-react';
 import { useWeb3 } from '../context/Web3Context';
 import { getErrorMessage } from '../utils/errorMessage';
-import { isAbiFunction, asAbiArray } from '../types/abi';
-import { parseConstructorArgs, encodeConstructorSuffix } from '../utils/constructorArgs';
+import { isAbiFunction, asAbiArray, isReadFunction } from '../types/abi';
+import { parseConstructorArgs, encodeConstructorSuffix, constructorArgKey } from '../utils/constructorArgs';
 import type { SaveDeploymentPayload } from '../utils/userData';
 
 interface CompileOutputProps {
@@ -114,7 +114,8 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, dep
         deployer: account || '',
         timestamp: new Date().toISOString(),
         status: 'confirmed',
-        isRealChain: true
+        isRealChain: true,
+        abi: result.abi as SimulatedDeployment['abi'],
       };
 
       onDeployment?.(deploymentEntry, { deployment_kind: 'promoted', constructor_args: processedArgs });
@@ -153,7 +154,8 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, dep
         deployer: browserVM.getActiveAccount(),
         timestamp: new Date().toISOString(),
         status: 'confirmed',
-        isRealChain: false
+        isRealChain: false,
+        abi: result.abi as SimulatedDeployment['abi'],
       };
 
       onDeployment?.(simulated, {
@@ -199,7 +201,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, dep
 
   const functionCount = abiList.filter(isAbiFunction).length;
   const stateFunctionCount = abiList.filter(
-    (i) => isAbiFunction(i) && i.stateMutability !== 'view' && i.stateMutability !== 'pure'
+    (i) => isAbiFunction(i) && !isReadFunction(i)
   ).length;
 
   return (
@@ -271,16 +273,16 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, dep
               <div className="p-4 space-y-3 bg-[#1a1a1a] border-t border-[#2d2d2d]/30">
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {constructorInputs.map((input: any, index: number) => {
-                  const inputName = input.name || `arg_${index}`;
+                  const inputName = constructorArgKey(input, index);
                   return (
                     <div key={inputName} className="flex flex-col gap-1">
                       <label className="text-[10px] text-gray-400 font-mono">
-                        {input.name ? `${input.name} (${input.type})` : input.type}
+                        {input.name ? `${input.name} (${input.type})` : `${input.type} (#${index})`}
                       </label>
                       <input
                         type="text"
-                        value={constructorArgs[input.name || ''] || ''}
-                        onChange={(e) => setConstructorArgs(prev => ({ ...prev, [input.name || '']: e.target.value }))}
+                        value={constructorArgs[inputName] || ''}
+                        onChange={(e) => setConstructorArgs(prev => ({ ...prev, [inputName]: e.target.value }))}
                         placeholder={input.type.includes('[]') ? '["val1", "val2"]' : `e.g. ${input.type}`}
                         className="bg-[#252526] border border-[#333] hover:border-[#007acc] text-[11px] font-mono text-[#cccccc] px-3 py-2 rounded outline-none focus:border-[#007acc] transition-all"
                       />
