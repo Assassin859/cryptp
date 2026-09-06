@@ -1,4 +1,4 @@
-import { Zap, Play, ShieldCheck, Rocket, Wallet, Globe, Check, ExternalLink, Terminal, BarChart3, Flame } from 'lucide-react';
+import { Zap, Play, ShieldCheck, Rocket, Wallet, Globe, Check, ExternalLink, Terminal, BarChart3, Flame, Database } from 'lucide-react';
 
 interface DeploymentGuideProps {
   isSidebar?: boolean;
@@ -98,8 +98,20 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
 
           {/* Step 7 */}
           <div className="bg-[#1e1e1e] border border-[#3c3c3c] p-3 rounded-lg">
+            <h4 className="font-bold text-teal-400 mb-1.5 flex items-center gap-1.5">
+              <Database className="h-3.5 w-3.5" /> Step 7: Index with The Graph
+            </h4>
+            <ol className="text-[10px] text-gray-400 space-y-1 list-decimal list-inside pl-1">
+              <li>After a <strong className="text-gray-300">Sepolia</strong> deploy of SimpleStorage, open <strong className="text-gray-300">Indexed</strong></li>
+              <li>Click <strong className="text-gray-300">Register for indexing</strong>, then call <code className="text-gray-300">setValue</code> and <strong className="text-gray-300">Refresh</strong></li>
+              <li>Optional: <strong className="text-gray-300">Settings → The Graph</strong> or Indexed → <strong className="text-gray-300">My Graph Studio</strong> to use your own Studio URL</li>
+            </ol>
+          </div>
+
+          {/* Step 8 */}
+          <div className="bg-[#1e1e1e] border border-[#3c3c3c] p-3 rounded-lg">
             <h4 className="font-bold text-blue-400 mb-1.5 flex items-center gap-1.5">
-              <Globe className="h-3.5 w-3.5" /> Step 7: Verify on Etherscan
+              <Globe className="h-3.5 w-3.5" /> Step 8: Verify on Etherscan
             </h4>
             <p className="text-[10px] text-gray-400 pl-1">
               Verify your source code on{' '}
@@ -230,13 +242,29 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
         </div>
       </div>
 
-      {/* Step 7 — Verify */}
+      {/* Step 7 — The Graph */}
+      <div className="mt-8 bg-gray-800/50 backdrop-blur-sm p-6 rounded-xl border border-gray-700 shadow-xl">
+        <div className="flex items-center mb-4">
+          <div className="h-10 w-10 bg-teal-500/20 rounded-lg flex items-center justify-center mr-3">
+            <Database className="h-6 w-6 text-teal-400" />
+          </div>
+          <h2 className="text-xl font-semibold">Step 7: Index with The Graph</h2>
+        </div>
+        <ol className="text-gray-300 space-y-3 list-decimal list-inside">
+          <li className="pl-2">Deploy <strong>SimpleStorage</strong> to Sepolia, then open the <strong>Indexed</strong> sidebar</li>
+          <li className="pl-2">Click <strong>Register for indexing</strong>, call <code className="bg-gray-800 px-1 rounded">setValue</code>, then <strong>Refresh</strong> to see events</li>
+          <li className="pl-2">Optional: <strong>Settings → The Graph</strong> or <strong>My Graph Studio</strong> to paste your own Studio GraphQL URL</li>
+          <li className="pl-2">Event history lives on The Graph — not in Supabase (workspaces/deploy recipes stay in Supabase)</li>
+        </ol>
+      </div>
+
+      {/* Step 8 — Verify */}
       <div className="mt-8 bg-gray-800/50 backdrop-blur-sm p-6 rounded-xl border border-gray-700 shadow-xl">
         <div className="flex items-center mb-4">
           <div className="h-10 w-10 bg-blue-500/20 rounded-lg flex items-center justify-center mr-3">
             <Globe className="h-6 w-6 text-blue-400" />
           </div>
-          <h2 className="text-xl font-semibold">Step 7: Verify on Etherscan (Optional but Recommended)</h2>
+          <h2 className="text-xl font-semibold">Step 8: Verify on Etherscan (Optional but Recommended)</h2>
         </div>
         <ol className="text-gray-300 space-y-3 list-decimal list-inside">
           <li className="pl-2">Copy your deployed contract address from the History tab</li>

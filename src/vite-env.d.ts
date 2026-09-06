@@ -19,6 +19,8 @@ interface ImportMetaEnv {
   readonly VITE_INFURA_PROJECT_ID?: string;
   readonly VITE_ETHERSCAN_API_KEY?: string;
   readonly VITE_DEFAULT_NETWORK?: string;
+  readonly VITE_GRAPH_ENDPOINT?: string;
+  readonly VITE_GRAPH_REGISTRY_ADDRESS?: string;
 }
 
 interface ImportMeta {

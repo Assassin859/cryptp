@@ -1,0 +1,46 @@
+specVersion: 1.0.0
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: CryptPIndexRegistry
+    network: sepolia
+    source:
+      # Deployed Sepolia CryptPIndexRegistry (tx 0x7fe424d934716b0979ed257e2e506f118fdac47691a4625104f9c796275217fd)
+      address: "0x94343B4062d0A021558998463664f4B90bA0a6ab"
+      abi: CryptPIndexRegistry
+      startBlock: 11638951
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - IndexedContract
+      abis:
+        - name: CryptPIndexRegistry
+          file: ./abis/CryptPIndexRegistry.json
+        - name: SimpleStorage
+          file: ./abis/SimpleStorage.json
+      eventHandlers:
+        - event: ContractRegistered(indexed address,indexed address,indexed bytes32)
+          handler: handleContractRegistered
+      file: ./src/registry.ts
+templates:
+  - kind: ethereum/contract
+    name: SimpleStorage
+    network: sepolia
+    source:
+      abi: SimpleStorage
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ValueChanged
+      abis:
+        - name: SimpleStorage
+          file: ./abis/SimpleStorage.json
+      eventHandlers:
+        - event: ValueChanged(indexed address,uint256)
+          handler: handleValueChanged
+      file: ./src/simple-storage.ts

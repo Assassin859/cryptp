@@ -102,6 +102,7 @@ function App() {
       console.log('Inactivity timeout reached. Signing out...');
       await supabase.auth.signOut();
       setUserId('');
+      // Preserve *-keys* (AI/RPC + cryptp-graph-keys Studio prefs)
       Object.keys(localStorage)
         .filter(
           (key) =>

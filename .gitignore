@@ -43,3 +43,8 @@ test-results/
 playwright-report/
 blob-report/
 dist-test/
+
+# The Graph subgraph build
+subgraph/node_modules/
+subgraph/generated/
+subgraph/build/

@@ -4,6 +4,16 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabaseClient';
 import { getProjects, migrateWorkspacesToFiles, deleteProject } from '../utils/userData';
 import ConfirmModal from './ConfirmModal';
+import {
+  getCustomGraphEndpoint,
+  getCustomGraphRegistryAddress,
+  getGraphSourceMode,
+  getGraphUserPrefs,
+  getPlatformGraphEndpoint,
+  setGraphUserPrefs,
+  type GraphSourceMode,
+  type GraphUserPrefs,
+} from '../utils/graphConstants';
 
 interface SettingsSidebarProps {
   user: User | null;
@@ -57,6 +67,36 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
     try { 
       setRpcKeys(JSON.parse(currentRpc || '{"alchemy":"","infura":"","etherscan":""}')); 
     } catch { setRpcKeys({}); }
+
+    // Cloud graph_prefs → local cryptp-graph-keys
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('user_settings')
+          .select('graph_prefs')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        const gp = data?.graph_prefs as Partial<GraphUserPrefs> | null;
+        if (gp && typeof gp === 'object' && (gp.endpoint || gp.registry || gp.mode)) {
+          const applied = setGraphUserPrefs({
+            mode: gp.mode === 'studio' ? 'studio' : 'platform',
+            endpoint: typeof gp.endpoint === 'string' ? gp.endpoint : '',
+            registry: typeof gp.registry === 'string' ? gp.registry : '',
+          });
+          setGraphMode(applied.mode);
+          setGraphEndpoint(applied.endpoint);
+          setGraphRegistry(applied.registry);
+        } else {
+          setGraphMode(getGraphSourceMode());
+          setGraphEndpoint(getCustomGraphEndpoint());
+          setGraphRegistry(getCustomGraphRegistryAddress());
+        }
+      } catch {
+        setGraphMode(getGraphSourceMode());
+        setGraphEndpoint(getCustomGraphEndpoint());
+        setGraphRegistry(getCustomGraphRegistryAddress());
+      }
+    })();
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -64,19 +104,55 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
   const [visibleKey, setVisibleKey] = useState<string | null>(null);
   const [isSavingKeys, setIsSavingKeys] = useState(false);
 
+  const [graphMode, setGraphMode] = useState<GraphSourceMode>(() => getGraphSourceMode());
+  const [graphEndpoint, setGraphEndpoint] = useState(() => getCustomGraphEndpoint());
+  const [graphRegistry, setGraphRegistry] = useState(() => getCustomGraphRegistryAddress());
+  const [graphSavedFlash, setGraphSavedFlash] = useState(false);
+
+  const saveGraphPrefs = async () => {
+    const prefs = setGraphUserPrefs({
+      mode: graphMode,
+      endpoint: graphEndpoint,
+      registry: graphRegistry,
+    });
+    setGraphSavedFlash(true);
+    window.setTimeout(() => setGraphSavedFlash(false), 2000);
+    if (!user) return;
+    try {
+      const { error } = await supabase.from('user_settings').upsert({
+        user_id: user.id,
+        ai_keys: aiKeys,
+        rpc_keys: rpcKeys,
+        graph_prefs: prefs,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    } catch (e: unknown) {
+      console.error('Graph prefs cloud sync failed:', e);
+      alert(
+        'Saved on this device, but cloud sync failed. Run supabase-migration-graph-prefs.sql if graph_prefs column is missing.'
+      );
+    }
+  };
+
   const saveKeysToCloud = async () => {
      if (!user) return;
      setIsSavingKeys(true);
      try {
        localStorage.setItem(getScopedKey('cryptp-rpc-keys'), JSON.stringify(rpcKeys));
        localStorage.setItem(getScopedKey('cryptp-ai-keys'), JSON.stringify(aiKeys));
-       // Notify same-window listeners (e.g. AIChat useEffect) — native storage event only fires cross-tab
+       const graphPrefs = setGraphUserPrefs({
+         mode: graphMode,
+         endpoint: graphEndpoint,
+         registry: graphRegistry,
+       });
        window.dispatchEvent(new Event('storage'));
 
        const { error } = await supabase.from('user_settings').upsert({
          user_id: user.id,
          rpc_keys: rpcKeys,
          ai_keys: aiKeys,
+         graph_prefs: graphPrefs,
          updated_at: new Date().toISOString()
        });
        
@@ -93,7 +169,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
      if (!user) return;
      setConfirmModal({
        title: 'Delete API Keys',
-       message: 'Permanently delete your API keys from the cloud and this device? You will need to re-enter them to use AI features.',
+       message: 'Permanently delete your AI/RPC API keys from the cloud and this device? Graph Studio prefs are kept.',
        confirmLabel: 'Delete Keys',
        isDangerous: true,
        onConfirm: async () => {
@@ -102,7 +178,13 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
          localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
          localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
          try {
-           await supabase.from('user_settings').delete().eq('user_id', user.id);
+           await supabase.from('user_settings').upsert({
+             user_id: user.id,
+             ai_keys: {},
+             rpc_keys: {},
+             graph_prefs: getGraphUserPrefs(),
+             updated_at: new Date().toISOString(),
+           });
          } catch { /* cloud row may not exist */ }
        }
      });
@@ -146,6 +228,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
           }
           localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
           localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
+          localStorage.removeItem('cryptp-graph-keys');
           onSignOut();
         } catch(e: any) {
           console.error("Failed to erase data:", e);
@@ -389,6 +472,74 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
              <button onClick={deleteKeysFromCloud} className="flex-1 px-3 py-2 bg-red-600/20 border border-red-500/30 hover:bg-red-500/10 text-red-400 rounded text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2" title="Delete API Keys">
                <Trash2 className="size-3.5" /> Delete
              </button>
+           </div>
+        </div>
+
+        {/* The Graph */}
+        <div>
+           <h3 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 pl-1 flex items-center gap-1.5">
+             <Database className="size-3" /> The Graph
+           </h3>
+           <p className="text-[9px] text-gray-500 mb-3 pl-1 leading-relaxed">
+             Default: CryptP platform subgraph. Or connect <strong className="text-gray-400">your Graph Studio</strong> query URL.
+               Same controls live under the <strong className="text-gray-400">Indexed</strong> panel.
+               Saved to this device and synced to your account (`user_settings.graph_prefs`).
+             {!getPlatformGraphEndpoint() && (
+               <span className="block mt-1 text-amber-500/80">Platform endpoint not set in env yet.</span>
+             )}
+           </p>
+           <div className="bg-[#121214] border border-gray-800 rounded-lg p-3 space-y-3">
+              <div className="flex gap-1 p-0.5 rounded bg-[#1e1e1e] border border-[#333]">
+                <button
+                  type="button"
+                  onClick={() => setGraphMode('platform')}
+                  className={`flex-1 px-2 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                    graphMode === 'platform' ? 'bg-[#007acc] text-white' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  CryptP platform
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGraphMode('studio')}
+                  className={`flex-1 px-2 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                    graphMode === 'studio' ? 'bg-[#007acc] text-white' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  My Graph Studio
+                </button>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">
+                  Studio GraphQL URL
+                </label>
+                <input
+                  type="url"
+                  value={graphEndpoint}
+                  onChange={(e) => setGraphEndpoint(e.target.value)}
+                  placeholder="https://api.studio.thegraph.com/query/..."
+                  className="w-full bg-[#1e1e1e] border border-[#333] rounded p-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">
+                  Registry address (optional)
+                </label>
+                <input
+                  type="text"
+                  value={graphRegistry}
+                  onChange={(e) => setGraphRegistry(e.target.value)}
+                  placeholder="0x… CryptPIndexRegistry"
+                  className="w-full bg-[#1e1e1e] border border-[#333] rounded p-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={saveGraphPrefs}
+                className="w-full px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 rounded text-[10px] font-black uppercase tracking-widest transition-colors"
+              >
+                {graphSavedFlash ? 'Saved' : 'Save Graph settings'}
+              </button>
            </div>
         </div>
 

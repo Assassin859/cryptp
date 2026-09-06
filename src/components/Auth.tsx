@@ -105,6 +105,7 @@ const Auth: React.FC<AuthProps> = ({ onSignedIn }) => {
     setLoading(true);
     await supabase.auth.signOut();
     if (typeof window !== 'undefined') {
+      // Preserve *-keys* (AI/RPC + cryptp-graph-keys Studio prefs)
       Object.keys(window.localStorage)
         .filter(k =>
           k.startsWith('cryptp-') &&

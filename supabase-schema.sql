@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
   user_id uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   ai_keys jsonb DEFAULT '{}'::jsonb,
   rpc_keys jsonb DEFAULT '{}'::jsonb,
+  graph_prefs jsonb DEFAULT '{}'::jsonb,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 

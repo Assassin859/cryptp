@@ -1,0 +1,19 @@
+type IndexedContract @entity(immutable: true) {
+  id: Bytes!
+  contractAddress: Bytes!
+  registrant: Bytes!
+  kind: Bytes!
+  registeredAt: BigInt!
+  registeredTx: Bytes!
+  blockNumber: BigInt!
+}
+
+type ValueChanged @entity(immutable: true) {
+  id: Bytes!
+  contract: Bytes!
+  setter: Bytes!
+  newValue: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}

@@ -33,6 +33,7 @@ graph TD
 - **True In-Browser EVM**: Powered by `@ethereumjs/vm`, ensuring 100% state and math accuracy without a local node.
 - **Insight-Driven Profiling**: Visualizes gas consumption line-by-line, allowing you to optimize contracts during development.
 - **Studio-Ready UX**: Integrated AI assistant, security auditor, and one-click token factories.
+- **The Graph (Indexed)**: Query on-chain `ValueChanged` history in-IDE via a platform Sepolia subgraph, or paste your own Graph Studio endpoint (Settings / Indexed). See [docs/THE_GRAPH.md](docs/THE_GRAPH.md).
 
 ---
 
@@ -73,6 +74,8 @@ During execution, the VM emits "step" events. We map these Program Counters (PC)
 
 2. **Environment Setup** (required):
    Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from your [Supabase](https://supabase.com/dashboard) project (Settings → API).
+
+   Optional Continuity / The Graph (operator): `VITE_GRAPH_ENDPOINT`, `VITE_GRAPH_REGISTRY_ADDRESS` — see [docs/THE_GRAPH.md](docs/THE_GRAPH.md). Users can also paste a Studio URL in **Settings → The Graph**.
 
 3. **Launch the Engine**:
    ```bash

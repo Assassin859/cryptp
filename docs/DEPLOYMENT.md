@@ -307,11 +307,26 @@ The in-browser IDE stores durable artifacts in Supabase and rebuilds the local E
 |-------|---------|
 | `files` | Source code |
 | `compilations` | ABI, bytecode, source map, content hash, security report |
-| `deployments` | Deploy/execute/promoted transaction recipes |
+| `deployments` | Deploy/execute/promoted transaction recipes (sandbox replay) |
 | `gas_profiles` | Saved gas profiler heatmaps |
-| `user_settings` | API keys and preferences |
+| `user_settings` | AI/RPC keys + `graph_prefs` (Studio/platform endpoint prefs) |
+
+**The Graph is not stored as event rows in Supabase.** On-chain history is indexed by The Graph. Only Graph *connection prefs* live in `user_settings.graph_prefs`. Do **not** add event tables for Indexed history.
+
+**Schema:** For existing projects, run [`supabase-migration-graph-prefs.sql`](../supabase-migration-graph-prefs.sql) once (adds `graph_prefs`). Full schema: [`supabase-schema.sql`](../supabase-schema.sql).
 
 **Sandbox replay:** On project load, the app fetches `deployments` where `deployment_kind` is `deploy` or `execute` (chronological order), resets `browserVM`, and replays each row. Contract addresses may change after redeploy; the UI maps stored addresses to live ones.
+
+### The Graph env (optional)
+
+After deploying `CryptPIndexRegistry` and publishing `subgraph/`:
+
+```
+VITE_GRAPH_REGISTRY_ADDRESS=0x...
+VITE_GRAPH_ENDPOINT=https://api.studio.thegraph.com/query/...
+```
+
+Until these are set, the **Indexed** panel shows operator setup (or users can switch to **My Graph Studio**). `subgraph/subgraph.yaml` ships with a placeholder registry address (`0x000…`) until you run `npm run deploy:registry`.
 
 **Schema migration:** Run [`supabase-migration-persistence.sql`](../supabase-migration-persistence.sql) in the Supabase SQL Editor before using persistence features.
 

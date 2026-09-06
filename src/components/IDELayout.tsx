@@ -18,7 +18,8 @@ import {
   Info,
   BarChart3,
   Flame,
-  Github
+  Github,
+  Database
 } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 import { browserVM } from '../utils/browserVM';
@@ -62,6 +63,8 @@ import SettingsSidebar from './SettingsSidebar';
 import GasProfiler from './GasProfiler';
 import DocsSidebar from './DocsSidebar';
 import ConfirmModal from './ConfirmModal';
+import GraphHistoryPanel from './GraphHistoryPanel';
+import { abiLooksLikeSimpleStorage, setGraphUserPrefs } from '../utils/graphConstants';
 import InputModal from './InputModal';
 import AethonTerminal from './AethonTerminal';
 
@@ -92,7 +95,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   // Mobile-safe initial layouts
   const isMobileInitial = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
 
-  const [activeActivity, setActiveActivity] = useState<'explorer' | 'factory' | 'interact' | 'chain' | 'docs' | 'search' | 'analytics'>('explorer');
+  const [activeActivity, setActiveActivity] = useState<'explorer' | 'factory' | 'interact' | 'chain' | 'docs' | 'search' | 'analytics' | 'graph'>('explorer');
+  const [highlightGraphRegister, setHighlightGraphRegister] = useState(false);
   const [activeRightActivity, setActiveRightActivity] = useState<'ai' | 'profiler' | 'settings'>(isNewUser ? 'settings' : 'ai');
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [showSideBar, setShowSideBar] = useState(!isMobileInitial);
@@ -268,6 +272,18 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             const scopedRpcKey = `cryptp-rpc-keys-${userId}`;
             if (settingsData.ai_keys) localStorage.setItem(scopedAiKey, JSON.stringify(settingsData.ai_keys));
             if (settingsData.rpc_keys) localStorage.setItem(scopedRpcKey, JSON.stringify(settingsData.rpc_keys));
+            const gp = settingsData.graph_prefs as {
+              mode?: string;
+              endpoint?: string;
+              registry?: string;
+            } | null;
+            if (gp && typeof gp === 'object') {
+              setGraphUserPrefs({
+                mode: gp.mode === 'studio' ? 'studio' : 'platform',
+                endpoint: typeof gp.endpoint === 'string' ? gp.endpoint : '',
+                registry: typeof gp.registry === 'string' ? gp.registry : '',
+              });
+            }
           }
         } catch (e) {
           console.error("Could not sync cloud settings:", e);
@@ -651,7 +667,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     setIsCompiling(true);
     try {
       const template = allTemplates.find(t => t.code === code);
-      const hardcodedBytecode = template?.hardcodedBytecode;
+      // Always solc-compile — hardcodedBytecode shortcuts are disabled (fake ABI risk).
+      void template;
       const projectFilesMap = targetFilesOverride || currentProject?.files?.map((f: ContractFile) => ({ 
         name: f.name, 
         content: f.id === activeFileId ? code : f.content 
@@ -662,7 +679,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       const sourceSet = forceCompileAll ? '__COMPILE_ALL__' : code;
       const activeFileName = projects.find(p => p.id === currentProject?.id)?.files?.find((f: ContractFile) => f.id === activeFileId)?.name || 'contract.sol';
       
-      const result = await compileWithHardhat(sourceSet, hardcodedBytecode, projectFilesMap, compilerVersion, undefined, activeFileName);
+      const result = await compileWithHardhat(sourceSet, undefined, projectFilesMap, compilerVersion, undefined, activeFileName);
       await handleCompilationComplete(result);
       return result;
     } catch (error) {
@@ -786,8 +803,31 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       network: withAbi.network,
       sourceSnapshot: lastCompiledSourceRef.current ?? undefined,
     });
-    setActiveActivity('interact');
-    setShowSideBar(true);
+
+    const isSepoliaLive =
+      withAbi.isRealChain === true && /sepolia/i.test(withAbi.network || '');
+    const canOfferGraph =
+      isSepoliaLive && abiLooksLikeSimpleStorage(withAbi.abi);
+
+    if (canOfferGraph) {
+      setConfirmModal({
+        title: 'Index with The Graph?',
+        message:
+          'Register this Sepolia contract so CryptP can index ValueChanged events. Default: CryptP platform subgraph. Optional: use your own Graph Studio URL under Indexed or Settings.',
+        confirmLabel: 'Open Indexed',
+        isDangerous: false,
+        onConfirm: () => {
+          setHighlightGraphRegister(true);
+          setActiveActivity('graph');
+          setShowSideBar(true);
+        },
+      });
+      setActiveActivity('interact');
+      setShowSideBar(true);
+    } else {
+      setActiveActivity('interact');
+      setShowSideBar(true);
+    }
   };
 
   const handleResetChain = async () => {
@@ -1562,6 +1602,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           <ActivityIcon active={activeActivity === 'factory'} onClick={() => { setActiveActivity('factory'); setShowSideBar(true); }} icon={<Zap className="size-5" />} label="Token Factory" />
           <ActivityIcon active={activeActivity === 'chain'} onClick={() => { setActiveActivity('chain'); setShowSideBar(true); }} icon={<LayoutGrid className="size-5" />} label="History" />
           <ActivityIcon active={activeActivity === 'interact'} onClick={() => { setActiveActivity('interact'); setShowSideBar(true); }} icon={<Play className="size-5" />} label="Interaction" />
+          <ActivityIcon active={activeActivity === 'graph'} onClick={() => { setActiveActivity('graph'); setShowSideBar(true); }} icon={<Database className="size-5" />} label="Indexed" />
           <ActivityIcon active={activeActivity === 'analytics'} onClick={() => { setActiveActivity('analytics'); setShowSideBar(true); }} icon={<BarChart3 className="size-5" />} label="Analytics" />
           <div className="flex-1"></div>
           <ActivityIcon active={showRightSidebar && activeRightActivity === 'profiler'} onClick={() => { setActiveRightActivity('profiler'); setShowRightSidebar(true); }} icon={<Flame className="size-5 text-orange-500" />} label="Gas Profiler" />
@@ -1581,6 +1622,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                    {activeActivity === 'factory' && 'Asset Factory'}
                    {activeActivity === 'chain' && 'History'}
                    {activeActivity === 'interact' && 'Deployment'}
+                   {activeActivity === 'graph' && 'Indexed'}
                    {activeActivity === 'analytics' && 'Analytics'}
                    {activeActivity === 'docs' && 'Documentation'}
                  </h3>
@@ -1628,6 +1670,25 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                     <Play className="size-8 mx-auto mb-2" />
                     <p className="text-xs italic">No active deployment.</p>
                   </div>
+                )}
+                {activeActivity === 'graph' && (
+                  <GraphHistoryPanel
+                    address={activeDeployment?.address ?? null}
+                    network={activeDeployment?.network ?? null}
+                    abi={activeDeployment?.abi ?? []}
+                    isRealChain={(() => {
+                      const match = simulations.find(
+                        (s) =>
+                          s.contractAddress?.toLowerCase() ===
+                          activeDeployment?.address?.toLowerCase()
+                      );
+                      if (match) return match.isRealChain === true;
+                      const net = activeDeployment?.network || '';
+                      return /sepolia/i.test(net) && !/local simulation/i.test(net);
+                    })()}
+                    highlightRegister={highlightGraphRegister}
+                    onRegistered={() => setHighlightGraphRegister(false)}
+                  />
                 )}
                 {activeActivity === 'analytics' && (
                    <React.Suspense fallback={<div className="p-4 text-xs text-gray-500 font-bold uppercase tracking-widest animate-pulse">Loading Analytics...</div>}>
