@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
+import type { editor as MonacoEditor } from 'monaco-editor';
 import { CompilationResult } from '../utils/hardhatCompiler';
 
 import { 
@@ -45,10 +46,35 @@ const SolidityEditor: React.FC<SolidityEditorProps> = ({
   const [originalCode, setOriginalCode] = useState('');
   const [isFetchingRemote, setIsFetchingRemote] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const onCodeChangeRef = useRef(onCodeChange);
+  onCodeChangeRef.current = onCodeChange;
 
   useEffect(() => {
     setShowStartScreen(!code && !activeFileName);
   }, [code, activeFileName]);
+
+  // Keep Monaco in sync when React `code` changes externally (templates, e2e, file switch).
+  useEffect(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    if (ed.getValue() !== code) {
+      ed.setValue(code);
+    }
+  }, [code]);
+
+  const bindE2eHook = (ed: MonacoEditor.IStandaloneCodeEditor) => {
+    editorRef.current = ed;
+    const w = window as unknown as {
+      __cryptpSetEditorValue?: (v: string) => void;
+      __cryptpGetEditorValue?: () => string;
+    };
+    w.__cryptpSetEditorValue = (value: string) => {
+      onCodeChangeRef.current(value);
+      ed.setValue(value);
+    };
+    w.__cryptpGetEditorValue = () => ed.getValue();
+  };
 
   useEffect(() => {
     setIsDiffMode(false);
@@ -222,8 +248,9 @@ const SolidityEditor: React.FC<SolidityEditorProps> = ({
             onMount={(editor) => {
               const modifiedEditor = editor.getModifiedEditor();
               modifiedEditor.onDidChangeModelContent(() => {
-                onCodeChange(modifiedEditor.getValue());
+                onCodeChangeRef.current(modifiedEditor.getValue());
               });
+              bindE2eHook(modifiedEditor);
             }}
           />
         ) : (
@@ -259,8 +286,9 @@ const SolidityEditor: React.FC<SolidityEditorProps> = ({
             }}
             onMount={(editor) => {
               editor.onDidChangeModelContent(() => {
-                onCodeChange(editor.getValue());
+                onCodeChangeRef.current(editor.getValue());
               });
+              bindE2eHook(editor);
             }}
           />
         )}

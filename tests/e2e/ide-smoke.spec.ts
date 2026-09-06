@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
-import { record, writeReport, getDefects } from './helpers/results';
+import { record, writeReport, getDefects, clearResults } from './helpers/results';
 import { cleanupSmokeWorkspaces } from './helpers/cleanup';
+import { simpleStorageTemplate } from '../../src/utils/contractTemplates';
 
 const SMOKE_EMAIL = process.env.SMOKE_EMAIL;
 const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD;
@@ -104,6 +105,7 @@ test.describe.serial('CryptP IDE full smoke test', () => {
 
   test('checklist A–E and persistence', async () => {
     test.setTimeout(900_000);
+    clearResults();
 
     const workspaceName = `Smoke_${Date.now()}`;
     const contractName = 'SmokeStorage';
@@ -144,6 +146,8 @@ test.describe.serial('CryptP IDE full smoke test', () => {
       record('B1', 'Workspace', 'New workspace', 'FAIL', String(e));
     }
 
+    let smokeFileId: string | undefined;
+
     try {
       if (!workspaceReady) throw new Error('Skipped — workspace not created in B1');
       const workspaceRow = projectSidebar(page)
@@ -155,7 +159,14 @@ test.describe.serial('CryptP IDE full smoke test', () => {
       await expect(page.getByRole('heading', { name: 'New Contract' })).toBeVisible({ timeout: 10_000 });
       await page.getByText('Simple Storage (Standard)').click();
       await page.getByPlaceholder('e.g. MyToken').fill(contractName);
+      const createRespPromise = page.waitForResponse(
+        (r) => r.url().includes('/rest/v1/files') && r.request().method() === 'POST',
+        { timeout: 30_000 }
+      );
       await page.getByRole('button', { name: 'Create Contract' }).click();
+      const createResp = await createRespPromise;
+      const created = (await createResp.json()) as { id?: string } | Array<{ id?: string }>;
+      smokeFileId = Array.isArray(created) ? created[0]?.id : created?.id;
       await expect(projectSidebar(page).getByText(`${contractName}.sol`).first()).toBeVisible({ timeout: 15_000 });
       record('B2', 'Workspace', 'Add file + Simple Storage template', 'PASS');
     } catch (e) {
@@ -164,56 +175,72 @@ test.describe.serial('CryptP IDE full smoke test', () => {
 
     try {
       if (!workspaceReady) throw new Error('Skipped — workspace not created in B1');
-      await projectSidebar(page).getByText(`${contractName}.sol`).first().click();
-      await page.waitForTimeout(500);
-      const saveResponse = page.waitForResponse(
-        (r) => r.url().includes('/rest/v1/files') && r.request().method() === 'PATCH',
-        { timeout: 20_000 }
+      if (!smokeFileId) throw new Error('Skipped — file id not captured in B2');
+
+      // Let create-time autosave settle so it cannot overwrite the marker below.
+      await page.waitForTimeout(1500);
+
+      const marked = `${simpleStorageTemplate.code.trimEnd()}\n// smoke-marker\n`;
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => {
+              const w = window as unknown as { __cryptpSetEditorValue?: (v: string) => void };
+              return typeof w.__cryptpSetEditorValue === 'function';
+            }),
+          { timeout: 15_000 }
+        )
+        .toBe(true);
+
+      const saveRespPromise = page.waitForResponse(
+        (r) =>
+          r.url().includes('/rest/v1/files') &&
+          r.request().method() === 'PATCH' &&
+          (r.request().postData() || '').includes('smoke-marker'),
+        { timeout: 15_000 }
       );
-      const edited = await page.evaluate(() => {
-        const monacoAny = (window as unknown as Record<string, unknown>).monaco;
-        if (!monacoAny || typeof monacoAny !== 'object') return false;
-        const monaco = monacoAny as {
-          editor: {
-            getEditors: () => Array<{
-              getModel: () => { getValue: () => string; getFullModelRange: () => unknown };
-              executeEdits: (source: string, edits: Array<{ range: unknown; text: string }>) => void;
-            }>;
-          };
-        };
-        const editor = monaco.editor.getEditors()[0];
-        const model = editor?.getModel();
-        if (!editor || !model) return false;
-        editor.executeEdits('smoke-test', [{
-          range: model.getFullModelRange(),
-          text: `${model.getValue()}\n// smoke-marker`,
-        }]);
-        return true;
-      });
-      if (!edited) throw new Error('Monaco model not available for B3 persistence test');
-      await saveResponse;
-      await page.waitForTimeout(500);
-      await clickActivity(page, 'explorer');
-      await projectSidebar(page).getByText(workspaceName, { exact: true }).click();
+      await page.evaluate((next) => {
+        const w = window as unknown as { __cryptpSetEditorValue?: (v: string) => void };
+        w.__cryptpSetEditorValue?.(next);
+      }, marked);
+      const saveResp = await saveRespPromise;
+      if (!saveResp.ok()) {
+        throw new Error(`Autosave PATCH failed: HTTP ${saveResp.status()}`);
+      }
+
       await page.reload();
       await page.waitForLoadState('domcontentloaded');
       await login(page);
       await dismissModals(page);
-      await page.waitForFunction(
-        () => !document.body.innerText.includes('Loading...'),
-        { timeout: 30_000 }
-      ).catch(() => {});
+      await page
+        .waitForFunction(() => !document.body.innerText.includes('Loading...'), { timeout: 30_000 })
+        .catch(() => {});
       await clickActivity(page, 'explorer');
       await projectSidebar(page).getByText(workspaceName, { exact: true }).click();
-      await projectSidebar(page).getByText(`${contractName}.sol`).first().click();
-      await expect(page.locator('.view-lines')).toContainText('smoke-marker', { timeout: 15_000 });
-      const content = await page.locator('.view-lines').textContent();
+      // Force re-select even if already active so code comes from loaded project files.
+      await projectSidebar(page).getByText(`${contractName}.sol`).first().click({ force: true });
+      await page.waitForTimeout(800);
+      // Prefer Monaco model via e2e hook — .view-lines is virtualized and truncates.
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => {
+              const w = window as unknown as { __cryptpGetEditorValue?: () => string };
+              return w.__cryptpGetEditorValue?.() || '';
+            }),
+          { timeout: 15_000 }
+        )
+        .toContain('smoke-marker');
+      const content = await page.evaluate(() => {
+        const w = window as unknown as { __cryptpGetEditorValue?: () => string };
+        return w.__cryptpGetEditorValue?.() || '';
+      });
       record(
         'B3',
         'Workspace',
         'Persistence after reload',
-        content?.includes('smoke-marker') ? 'PASS' : 'FAIL',
-        content?.includes('smoke-marker') ? undefined : 'smoke-marker not found after reload'
+        content.includes('smoke-marker') ? 'PASS' : 'FAIL',
+        content.includes('smoke-marker') ? undefined : 'smoke-marker not found after reload'
       );
     } catch (e) {
       record('B3', 'Workspace', 'Persistence', 'FAIL', String(e));

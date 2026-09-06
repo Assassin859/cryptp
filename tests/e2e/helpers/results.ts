@@ -14,6 +14,10 @@ export interface SmokeResult {
 
 const results: SmokeResult[] = [];
 
+export function clearResults(): void {
+  results.length = 0;
+}
+
 export function record(
   id: string,
   section: string,

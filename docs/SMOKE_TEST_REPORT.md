@@ -1,6 +1,6 @@
 # CryptP IDE Smoke Test Report
 
-**Date:** 2026-08-31  
+**Date:** 2026-09-06  
 **Environment:** local dev (`npm run dev`)  
 **Runner:** Playwright (`tests/e2e/ide-smoke.spec.ts`)
 
@@ -8,10 +8,10 @@
 
 | Status | Count |
 |--------|-------|
-| PASS | 30 |
+| PASS | 18 |
 | FAIL | 1 |
-| SKIP | 8 |
-| BLOCKED | 4 |
+| SKIP | 2 |
+| BLOCKED | 0 |
 
 ## Results
 
@@ -22,7 +22,7 @@
 | A3 | Auth | PASS | Dismissed or not shown |
 | B1 | Workspace | PASS | New workspace |
 | B2 | Workspace | PASS | Add file + Simple Storage template |
-| B3 | Workspace | FAIL | Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed  Locator: locator('.view-lines') Expected substring: [32m"smoke-marker"[39m Received string:    [31m"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;"[39m Timeout: 15000ms  Call log: [2m  - Expect "toContainText" with timeout 15000ms[22m [2m  - waiting for locator('.view-lines')[22m [2m    33 × locator resolved to <div data-mprt="8" aria-hidden="true" role="presentation" class="view-lines monaco-mouse-cursor-text">…</div>[22m [2m       - unexpected value "// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;"[22m  |
+| B3 | Workspace | FAIL | Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed  Locator: locator('.view-lines') Expected substring: [32m"smoke-marker"[39m Received string:    [31m"// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;"[39m Timeout: 15000ms  Call log: [2m  - Expect "toContainText" with timeout 15000ms[22m [2m  - waiting for locator('.view-lines')[22m [2m    34 × locator resolved to <div data-mprt="8" aria-hidden="true" role="presentation" class="view-lines monaco-mouse-cursor-text">…</div>[22m [2m       - unexpected value "// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;"[22m  |
 | B4 | Search | PASS | Find file by name |
 | B5 | Workspace | SKIP | Not automated; UI uses hidden file input |
 | C1 | Compile | PASS | Compile & Refresh success |
@@ -38,28 +38,6 @@
 | E3 | Interaction | PASS | Contract interaction panel |
 | E4 | Gas Profiler | PASS | Profiler panel |
 | E5 | History | SKIP | Skipped to preserve deployment state for later tests |
-| L1 | Persistence | PASS | Reload keeps interact panel |
-| L2 | Persistence | PASS | Stale compile blocks deploy |
-| F1 | Token Factory | PASS | Configure + preview |
-| F2 | Token Factory | PASS | Inject |
-| G1 | AI | PASS | Prompts for API key |
-| G2 | AI | SKIP | No keys in CI env |
-| G3 | AI | SKIP | Not exercised in automation |
-| G4 | AI | SKIP | Manual verification |
-| H1 | Settings | PASS | Settings panel |
-| H2 | Settings | SKIP | Download not triggered in automation |
-| H3 | Integrations | PASS | Docs sidebar |
-| I1 | Wallet | BLOCKED | No window.ethereum in Playwright Chromium |
-| I2 | Wallet | BLOCKED | Requires MetaMask |
-| I3 | Wallet | BLOCKED | Requires MetaMask extension |
-| I4 | Wallet | BLOCKED | Requires MetaMask |
-| J1 | GitHub | PASS | Modal tabs |
-| J2 | GitHub | SKIP | Requires linked GitHub OAuth |
-| J3 | GitHub | SKIP | Requires linked GitHub OAuth |
-| K1 | Regression | PASS | No mock compile fallback UI |
-| K2 | Regression | PASS | Code review: uses securityReport.findings |
-| K3 | Regression | PASS | SimulatedChain has retry UI per code review |
-| A4 | Auth | PASS | Sign out + re-login |
 
 ## Defects (FAIL)
 
@@ -73,16 +51,13 @@ Timeout: 15000ms
 Call log:
 [2m  - Expect "toContainText" with timeout 15000ms[22m
 [2m  - waiting for locator('.view-lines')[22m
-[2m    33 × locator resolved to <div data-mprt="8" aria-hidden="true" role="presentation" class="view-lines monaco-mouse-cursor-text">…</div>[22m
+[2m    34 × locator resolved to <div data-mprt="8" aria-hidden="true" role="presentation" class="view-lines monaco-mouse-cursor-text">…</div>[22m
 [2m       - unexpected value "// SPDX-License-Identifier: MITpragma solidity 0.8.20;/** * @title SimpleStorage * @dev Very simple contract for testing deployment with 100% security  score. */contract SimpleStorage {    uint256 private _value;    event ValueChanged(address indexed setter, uint256 newValue);    constructor() {        _value = 42;    }    function setValue(uint256 _newValue) public {        _value = _newValue;"[22m
 
 
 ## Blocked / manual follow-up
 
-- **I1**: No window.ethereum in Playwright Chromium
-- **I2**: Requires MetaMask
-- **I3**: Requires MetaMask extension
-- **I4**: Requires MetaMask
+_None._
 
 ## Known non-wired UI (N/A)
 
