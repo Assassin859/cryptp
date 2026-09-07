@@ -445,10 +445,8 @@ export const compile = async (
       success: false,
       errors: [
         {
-          severity: 'error',
+          type: 'error',
           message:
-            'Hardcoded bytecode without a real compile is disabled. Compile the source to obtain a matching ABI.',
-          formattedMessage:
             'Hardcoded bytecode without a real compile is disabled. Compile the source to obtain a matching ABI.',
         },
       ],

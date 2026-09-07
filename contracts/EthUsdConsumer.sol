@@ -39,12 +39,24 @@ contract EthUsdConsumer {
     }
 
     /// @notice Live answer from the Chainlink aggregator (no state change).
+    /// @dev Same staleness / validity checks as settleLatestPrice.
     function getLivePrice()
         external
         view
         returns (uint80 roundId, int256 answer, uint256 updatedAt)
     {
-        (roundId, answer, , updatedAt, ) = feed.latestRoundData();
+        (
+            uint80 rid,
+            int256 ans,
+            ,
+            uint256 upd,
+            uint80 answeredInRound
+        ) = feed.latestRoundData();
+
+        if (ans <= 0) revert InvalidAnswer();
+        if (answeredInRound < rid) revert StaleRound();
+
+        return (rid, ans, upd);
     }
 
     /// @notice Last settled snapshot written by settleLatestPrice.

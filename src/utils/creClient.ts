@@ -60,6 +60,12 @@ export function clearCreVerdictCache(): void {
   cache.clear();
 }
 
+/** Drop a single hash entry (e.g. on recompile of that source set). */
+export function clearCreVerdictForHash(sourceHash: string): void {
+  if (!sourceHash) return;
+  cache.delete(normalizeHash(sourceHash));
+}
+
 export function storeCreVerdict(result: CreAuditResult): void {
   if (!result.sourceHash) return;
   // Only cache gateable stub/live verdicts for deploy unlock.

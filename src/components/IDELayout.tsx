@@ -73,7 +73,7 @@ const AIChat = React.lazy(() => import('./AIChat'));
 const AnalyticsSidebar = React.lazy(() => import('./AnalyticsSidebar'));
 import { User } from '@supabase/supabase-js';
 import { SecurityReport, scanContract } from '../utils/securityScanner';
-import { creAllowsLiveDeploy, clearCreVerdictCache } from '../utils/creClient';
+import { creAllowsLiveDeploy, clearCreVerdictForHash } from '../utils/creClient';
 import { isCreGateEnabled } from '../utils/creConstants';
 import { 
   ContractFile,
@@ -672,7 +672,6 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     setCompileResult(result);
     setActiveCompileDeployment(null);
     if (result && result.success && currentProject) {
-       clearCreVerdictCache();
        setHasCompiledInSession(true);
        lastCompiledSourceRef.current = code;
        const report = scanContract(code);
@@ -680,7 +679,10 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
 
        if (activeFileId) {
          try {
+           const prevHash = lastCompiledHashRef.current;
            const { hash: contentHash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
+           if (prevHash) clearCreVerdictForHash(prevHash);
+           clearCreVerdictForHash(contentHash);
            lastCompiledHashRef.current = contentHash;
            lastCompiledAuditSourceRef.current = canonical;
            const saved = await saveCompilation(userId, currentProject.id, result, {
@@ -694,7 +696,10 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
          }
        } else {
          try {
+           const prevHash = lastCompiledHashRef.current;
            const { hash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
+           if (prevHash) clearCreVerdictForHash(prevHash);
+           clearCreVerdictForHash(hash);
            lastCompiledHashRef.current = hash;
            lastCompiledAuditSourceRef.current = canonical;
          } catch {
@@ -736,9 +741,9 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       return result;
     } catch (error) {
       console.error('Compilation error:', error);
-      const errResult = {
+      const errResult: CompilationResult = {
         success: false,
-        errors: [{ type: 'error', message: error instanceof Error ? error.message : 'Unknown error' }]
+        errors: [{ type: 'error' as const, message: error instanceof Error ? error.message : 'Unknown error' }]
       };
       await handleCompilationComplete(errResult);
       return errResult;
@@ -829,7 +834,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       status: entry.status,
       gas_used: entry.gasUsed,
       deployer: entry.deployer,
-      abi: (compileResult?.abi || entry.abi || []) as unknown[],
+      abi: (entry.abi || compileResult?.abi || []) as unknown[],
       file_id: activeFileId,
       compilation_id: lastCompilationId.current ?? undefined,
       deployment_kind: (extra.deployment_kind ?? 'deploy') as DeploymentKind,
@@ -1337,7 +1342,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       title: 'Inject Contract',
       label: 'File name',
       placeholder: 'e.g. MyToken.sol',
-      defaultValue: `${type}Token.sol`,
+      defaultValue: type === 'CounterHook' || /Hook$/i.test(type) ? `${type}.sol` : `${type}Token.sol`,
       onConfirm: async (inputName: string) => {
         const name = inputName.endsWith('.sol') ? inputName : `${inputName}.sol`;
         try {
@@ -1580,7 +1585,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             );
           }
           const processedArgs = promoteAbi
-            ? parseConstructorArgsFromAbi(promoteAbi, {})
+            ? parseConstructorArgsFromAbi(promoteAbi as unknown[], {})
             : [];
           const factory = new ethers.ContractFactory(
             promoteAbi as any,

@@ -51,32 +51,36 @@ async function withSepoliaProvider<T>(
   throw lastErr instanceof Error ? lastErr : new Error('Sepolia RPC unavailable for Chainlink read');
 }
 
-/** Live ETH/USD from consumer.getLivePrice or the Sepolia feed proxy. */
+function assertFreshRound(roundId: bigint, answer: bigint, answeredInRound: bigint): void {
+  if (answer <= 0n) throw new Error('Invalid Chainlink answer');
+  if (answeredInRound < roundId) throw new Error('Stale Chainlink round');
+}
+
+/** Live ETH/USD from aggregator latestRoundData (via consumer.feed or Sepolia proxy). */
 export async function readLiveEthUsd(): Promise<EthUsdRead> {
   return withSepoliaProvider(async (provider) => {
     const consumerAddr = getEthUsdConsumerAddress();
+    let feedAddress: string = SEPOLIA_ETH_USD_FEED;
+    let source: EthUsdRead['source'] = 'feed';
+
     if (consumerAddr) {
       const consumer = new Contract(consumerAddr, ETH_USD_CONSUMER_ABI, provider);
-      const decimals: number = Number(await consumer.decimals());
-      const [roundId, answer, updatedAt] = await consumer.getLivePrice();
-      return {
-        usd: answerToUsd(BigInt(answer), decimals),
-        roundId: BigInt(roundId),
-        updatedAt: Number(updatedAt),
-        decimals,
-        source: 'consumer-live',
-      };
+      feedAddress = String(await consumer.feed());
+      source = 'consumer-live';
     }
 
-    const feed = new Contract(SEPOLIA_ETH_USD_FEED, AGGREGATOR_V3_ABI, provider);
+    const feed = new Contract(feedAddress, AGGREGATOR_V3_ABI, provider);
     const decimals: number = Number(await feed.decimals());
-    const [roundId, answer, , updatedAt] = await feed.latestRoundData();
+    const [roundId, answer, , updatedAt, answeredInRound] = await feed.latestRoundData();
+    const rid = BigInt(roundId);
+    const ans = BigInt(answer);
+    assertFreshRound(rid, ans, BigInt(answeredInRound));
     return {
-      usd: answerToUsd(BigInt(answer), decimals),
-      roundId: BigInt(roundId),
+      usd: answerToUsd(ans, decimals),
+      roundId: rid,
       updatedAt: Number(updatedAt),
       decimals,
-      source: 'feed',
+      source,
     };
   });
 }

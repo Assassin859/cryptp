@@ -47,7 +47,9 @@ export function scanSourceHeuristics(source: string | undefined): RiskFlags {
   const s = String(source || '').toLowerCase();
 
   if (
-    /tax|fee|reflection/.test(s) &&
+    /\bsettax\b|\bsetfee\b|\btaxfee\b|_tax\b|\breflectionfee\b|\bexcludefromfee\b|_getreflection|_reflect/.test(
+      s
+    ) &&
     /onlyowner|owner\s*\(/.test(s) &&
     /transfer|swap/.test(s)
   ) {

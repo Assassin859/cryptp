@@ -1,5 +1,5 @@
 import { browserVM } from './browserVM';
-import type { CallFrame } from './browserVM';
+import type { CallFrame, ReplayEntry } from './browserVM';
 import {
   getDeployments,
   getSandboxReplayLog,
@@ -40,7 +40,18 @@ export async function rehydrateSandboxFromDb(
 
   if (replayLog.length > 0) {
     await browserVM.reset();
-    ({ addressMap, txHashMap, errors } = await browserVM.rehydrate(replayLog));
+    const entries: ReplayEntry[] = replayLog.map((d) => ({
+      id: d.id,
+      deployment_kind: d.deployment_kind ?? 'deploy',
+      bytecode: d.bytecode,
+      constructor_args: d.constructor_args,
+      abi: d.abi,
+      contract_address: d.contract_address,
+      call_data: d.call_data,
+      call_value_wei: d.call_value_wei,
+      gas_limit: d.gas_limit,
+    }));
+    ({ addressMap, txHashMap, errors } = await browserVM.rehydrate(entries));
   }
 
   const simulations: SimulatedDeployment[] = allDeployments.map((d) => {

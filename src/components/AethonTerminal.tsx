@@ -3,7 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { browserVM } from '../utils/browserVM';
-import { scanContract } from '../utils/securityScanner';
+import { scanContract, type SecurityFinding } from '../utils/securityScanner';
 import { analyzeStorageLayout } from '../utils/StorageAnalyzer';
 import { COMPLEX_FUNCTIONS, COMPLEX_FUNCTION_OVERHEAD } from '../constants/gas';
 import { CompilationResult } from '../utils/hardhatCompiler';
@@ -512,7 +512,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
 
             if (report.findings.length > 0) {
               term.writeln('');
-              report.findings.forEach((f) => {
+              report.findings.forEach((f: SecurityFinding) => {
                 const col = f.severity === 'High' ? '\x1b[1;31m' : f.severity === 'Medium' ? '\x1b[1;33m' : '\x1b[1;36m';
                 term.writeln(`  ${col}[${f.severity}][Conf: ${f.confidence || 'High'}]\x1b[0m ${f.title}`);
                 term.writeln(`  \x1b[90m  ${f.description}\x1b[0m`);

@@ -130,7 +130,7 @@ const SimulatedChain: React.FC<SimulatedChainProps> = ({
     setZoom(prev => Math.min(2, Math.max(0.5, prev * factor)));
   };
 
-  const triggerPulse = (fromX: number, fromY: number, toX: number, toY: number, color: string = '#10B981') => {
+  const triggerPulse = (_fromX: number, _fromY: number, _toX: number, _toY: number, color: string = '#10B981') => {
     const pulseId = `pulse-${pulseIdRef.current++}`;
     const startPulse: PulseAnimation = {
       id: pulseId,

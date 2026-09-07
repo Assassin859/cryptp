@@ -22,19 +22,9 @@ function App() {
     const supabase = getSupabase();
 
     const checkSession = async () => {
-      const hasAuthCode =
-        window.location.search.includes('code=') ||
-        window.location.hash.includes('access_token=');
-      const isSessionFresh = sessionStorage.getItem('cryptp-session-init');
-
-      if (!isSessionFresh) {
+      // Mark first boot; do not signOut on empty getSession — that races OAuth/storage restore.
+      if (!sessionStorage.getItem('cryptp-session-init')) {
         sessionStorage.setItem('cryptp-session-init', 'true');
-        if (!hasAuthCode) {
-          const preCheck = await supabase.auth.getSession();
-          if (!preCheck.data?.session) {
-            await supabase.auth.signOut();
-          }
-        }
       }
 
       const sessionResult = await supabase.auth.getSession();

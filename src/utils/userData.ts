@@ -189,12 +189,17 @@ export const deleteProject = async (projectId: string) => {
   const files = await getFiles(projectId);
   const fileIds = files.map((f) => f.id);
   if (fileIds.length > 0) {
-    await supabase.from('snapshots').delete().in('file_id', fileIds);
+    const { error: snapErr } = await supabase.from('snapshots').delete().in('file_id', fileIds);
+    if (snapErr) throw new Error(`Failed to delete snapshots: ${snapErr.message}`);
   }
-  await supabase.from('gas_profiles').delete().eq('project_id', projectId);
-  await supabase.from('compilations').delete().eq('project_id', projectId);
-  await supabase.from('deployments').delete().eq('project_id', projectId);
-  await supabase.from('files').delete().eq('workspace_id', projectId);
+  const { error: gasErr } = await supabase.from('gas_profiles').delete().eq('project_id', projectId);
+  if (gasErr) throw new Error(`Failed to delete gas profiles: ${gasErr.message}`);
+  const { error: compErr } = await supabase.from('compilations').delete().eq('project_id', projectId);
+  if (compErr) throw new Error(`Failed to delete compilations: ${compErr.message}`);
+  const { error: depErr } = await supabase.from('deployments').delete().eq('project_id', projectId);
+  if (depErr) throw new Error(`Failed to delete deployments: ${depErr.message}`);
+  const { error: filesErr } = await supabase.from('files').delete().eq('workspace_id', projectId);
+  if (filesErr) throw new Error(`Failed to delete files: ${filesErr.message}`);
 
   const { error } = await supabase.from('projects').delete().eq('id', projectId);
   if (error) throw error;
