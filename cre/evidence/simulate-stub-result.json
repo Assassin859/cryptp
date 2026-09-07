@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-09-07T08:24:29.022Z",
+  "note": "Local staging evidence for Aethon CRE Confidential audit policy (handlerInTee target). Replace with cre workflow simulate transcript when CLI is available.",
+  "cases": [
+    {
+      "name": "SimpleStorage",
+      "verdict": "ALLOW",
+      "verdictCode": 1,
+      "riskMask": 0,
+      "reason": "No risk flags; dual models allow with sufficient confidence",
+      "confidential": true,
+      "mode": "stub-staging"
+    },
+    {
+      "name": "selfdestruct",
+      "verdict": "DENY",
+      "verdictCode": 2,
+      "riskMask": 2,
+      "reason": "Risk flag or model DENY — live deploy blocked",
+      "confidential": true,
+      "mode": "stub-staging"
+    }
+  ]
+}

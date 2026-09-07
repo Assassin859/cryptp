@@ -34,6 +34,7 @@ graph TD
 - **Insight-Driven Profiling**: Visualizes gas consumption line-by-line, allowing you to optimize contracts during development.
 - **Studio-Ready UX**: Integrated AI assistant, security auditor, and one-click token factories.
 - **The Graph (Indexed)**: Query on-chain `ValueChanged` history in-IDE via a platform Sepolia subgraph, or paste your own Graph Studio endpoint (Settings / Indexed). See [docs/THE_GRAPH.md](docs/THE_GRAPH.md).
+- **Chainlink CRE (Confidential)**: Pre–MetaMask-deploy audit gate — proprietary policy in TEE (`handlerInTee`); stub proxy for staging, HTTP trigger when deployed. See [docs/CHAINLINK.md](docs/CHAINLINK.md).
 
 ---
 
@@ -46,6 +47,7 @@ graph TD
 | **`contracts/`** | Smart contract templates and local storage. | `Counter.sol` (Example template) |
 | **`scripts/`** | Deployment logic for real-world networks. | `deploy.ts` (Hardhat script) |
 | **`ignition/`** | Hardhat Ignition deployment modules. | `Counter.ts` |
+| **`cre/`** | Chainlink CRE Confidential audit workflow | `aethon-audit-firewall/` |
 | **`docs/`** | Deep-dive documentation for users. | `INSTALLATION.md` |
 
 ---

@@ -67,11 +67,14 @@ CryptP is a high-performance, browser-native IDE designed to transcend the compl
 
 ---
 
-## ⏸️ Phase 13: DeFi Ecosystem Integration (ON HOLD)
-*The IDE as an Assembly Line for protocols.*
+## 🚀 Phase 13: DeFi & Oracle Continuity (IN PROGRESS)
 
-- **DeFi Library Manager**: One-click import of Aave, Uniswap, and Chainlink standard interfaces.
-- **Oracle Simulation**: Feed mock prices into the local EVM to test liquidation logic.
+*ETHOnline Continuity — Chainlink first, then Uniswap.*
+
+- **Chainlink CRE Confidential Audit Gate**: Pre-live-deploy TEE policy (`cre/aethon-audit-firewall`), IDE Problem Audit → Confidential, MetaMask gate, `AuditFirewallConsumer` on Sepolia. See [docs/CHAINLINK.md](CHAINLINK.md).
+- **Chainlink Price Feeds (next)**: Onchain ETH/USD consumer + Analytics source upgrade.
+- **DeFi Library Manager**: One-click import of Aave, Uniswap, and Chainlink standard interfaces (Uniswap partner next).
+- **Oracle Simulation**: Feed mock prices into the local EVM to test liquidation logic (after Feeds).
 - **Flash-Loan Simulator**: Test complex multi-hop transactions within the CryptP Sandbox.
 
 ---

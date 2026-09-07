@@ -1,0 +1,23 @@
+{
+  "schedule": "0 */5 * * * *",
+  "scanner_url": "http://127.0.0.1:8787/scanner",
+  "primary_llm_url": "http://127.0.0.1:8787/llm/primary",
+  "secondary_llm_url": "http://127.0.0.1:8787/llm/secondary",
+  "mock_base_url": "http://127.0.0.1:8787",
+  "secrets_ids": {
+    "scanner_api_key_id": "scanner_api_key",
+    "primary_llm_api_key_id": "primary_llm_api_key",
+    "secondary_llm_api_key_id": "secondary_llm_api_key"
+  },
+  "http_trigger": {
+    "enabled": true,
+    "authorizedKeys": []
+  },
+  "evms": [
+    {
+      "chain_selector_name": "ethereum-testnet-sepolia",
+      "consumer_address": "",
+      "gas_limit": 500000
+    }
+  ]
+}

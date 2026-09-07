@@ -72,6 +72,8 @@ const AIChat = React.lazy(() => import('./AIChat'));
 const AnalyticsSidebar = React.lazy(() => import('./AnalyticsSidebar'));
 import { User } from '@supabase/supabase-js';
 import { SecurityReport, scanContract } from '../utils/securityScanner';
+import { creAllowsLiveDeploy } from '../utils/creClient';
+import { isCreGateEnabled } from '../utils/creConstants';
 import { 
   ContractFile,
   createFile, 
@@ -162,6 +164,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   const rehydrateChainRef = useRef(Promise.resolve());
   const lastCompilationId = useRef<string | null>(null);
   const lastCompiledSourceRef = useRef<string | null>(null);
+  const lastCompiledHashRef = useRef<string | null>(null);
   const prevCodeByFileRef = useRef<Record<string, string>>({});
 
   const [activeDeployment, setActiveDeployment] = useState<{
@@ -550,6 +553,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           setSecurityReport(null);
           setHasCompiledInSession(false);
           lastCompiledSourceRef.current = null;
+          lastCompiledHashRef.current = null;
           return;
         }
 
@@ -558,6 +562,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         setSecurityReport(latest.security_report ?? null);
         setHasCompiledInSession(true);
         lastCompiledSourceRef.current = code;
+        lastCompiledHashRef.current = latest.content_hash || hash;
       } catch (e) {
         console.error('Failed to restore compilation:', e);
       }
@@ -642,6 +647,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
        if (activeFileId) {
          try {
            const contentHash = await computeContentHash(code);
+           lastCompiledHashRef.current = contentHash;
            const saved = await saveCompilation(userId, currentProject.id, result, {
              fileId: activeFileId,
              contentHash,
@@ -650,6 +656,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
            lastCompilationId.current = saved.id;
          } catch (e) {
            console.error('Failed to persist compilation:', e);
+         }
+       } else {
+         try {
+           lastCompiledHashRef.current = await computeContentHash(code);
+         } catch {
+           lastCompiledHashRef.current = null;
          }
        }
 
@@ -1405,13 +1417,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       return;
     }
 
+    const runPromoteConfirm = (creNote: string) => {
     setConfirmModal({
       title: 'Promote to Live Network',
       message:
         'You are about to deploy this contract to a live network via MetaMask.\n\n' +
         '• Gas fees will be real and subject to network conditions.\n' +
-        '• Line-by-line Gas Heatmaps are unavailable for promoted contracts.\n\n' +
-        'Make sure your security score is high before proceeding.',
+        '• Line-by-line Gas Heatmaps are unavailable for promoted contracts.\n' +
+        creNote,
       confirmLabel: 'Promote',
       isDangerous: false,
       onConfirm: async () => {
@@ -1466,6 +1479,42 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         }
       }
     });
+    };
+
+    if (isCreGateEnabled()) {
+      const hash = lastCompiledHashRef.current || '';
+      const gate = creAllowsLiveDeploy(hash);
+      if (!gate.ok && !gate.needsConfirm) {
+        setConfirmModal({
+          title: 'Confidential audit required',
+          message: `${gate.message}\n\nOpen Problem Audit → Confidential, run the CRE audit, then promote again.`,
+          confirmLabel: 'Open Problem Audit',
+          isDangerous: false,
+          onConfirm: () => setActiveBottomTab('security'),
+        });
+        return;
+      }
+      if (gate.needsConfirm) {
+        setConfirmModal({
+          title: 'CRE MANUAL_REVIEW',
+          message: `${gate.message}\n\nYou can still promote after acknowledging this review flag.`,
+          confirmLabel: 'Promote anyway',
+          isDangerous: true,
+          onConfirm: () => {
+            // Defer so ConfirmModal's setConfirmModal(null) does not clear the next dialog.
+            window.setTimeout(
+              () => runPromoteConfirm('\n• CRE verdict: MANUAL_REVIEW (confirmed).\n'),
+              0
+            );
+          },
+        });
+        return;
+      }
+      runPromoteConfirm(`\n• CRE confidential verdict: ${gate.result?.verdict || 'ALLOW'}.\n`);
+      return;
+    }
+
+    runPromoteConfirm('\n• CRE gate disabled in Settings.\n');
   };
 
   const handleVersionChange = (newVersion: string) => {
@@ -1788,6 +1837,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                         <CompileOutput
                           result={compileResult}
                           code={code}
+                          contentHash={lastCompiledHashRef.current || undefined}
                           canDeploy={
                             hasCompiledInSession
                             && compileResult.success === true
@@ -1798,10 +1848,23 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                             setActiveCompileDeployment(s);
                           }}
                           deploymentResult={activeCompileDeployment}
+                          onOpenConfidentialAudit={() => {
+                            setShowBottomPanel(true);
+                            setActiveBottomTab('security');
+                          }}
                         />
                       </div>
                     )}
-                    {activeBottomTab === 'security' && <SecurityAudit report={securityReport} isScanning={isScanning} hasCompileError={compileResult?.success === false} />}
+                    {activeBottomTab === 'security' && (
+                      <SecurityAudit
+                        report={securityReport}
+                        isScanning={isScanning}
+                        hasCompileError={compileResult?.success === false}
+                        sourceCode={code}
+                        sourceHash={lastCompiledHashRef.current || undefined}
+                        network={networkName || 'sepolia'}
+                      />
+                    )}
                     {activeBottomTab === 'terminal' && (
                        <AethonTerminal 
                          currentProject={currentProject}

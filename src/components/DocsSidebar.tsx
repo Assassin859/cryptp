@@ -54,7 +54,17 @@ const DocsSidebar: React.FC = () => {
                </div>
                <div className="p-3 space-y-3 divide-y divide-[#2d2d2d]">
                   
-                  <div className="pt-2">
+                  <div className="pt-3">
+                     <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-bold text-gray-300">Chainlink CRE</span>
+                        <a href="https://docs.chain.link/cre" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 transition-colors uppercase font-bold">
+                           Docs <ExternalLink className="size-2.5" />
+                        </a>
+                     </div>
+                     <p className="text-[9px] text-[#858585]">Confidential pre-deploy audit gate. Run Problem Audit → Confidential. Operator setup: docs/CHAINLINK.md. Trigger proxy: npm run compiler → POST /cre/audit.</p>
+                  </div>
+
+                  <div className="pt-3">
                      <div className="flex items-center justify-between mb-1">
                         <span className="text-[11px] font-bold text-gray-300">Alchemy RPC</span>
                         <a href="https://dashboard.alchemy.com/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 transition-colors uppercase font-bold">

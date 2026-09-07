@@ -21,16 +21,27 @@ import { getErrorMessage } from '../utils/errorMessage';
 import { isAbiFunction, asAbiArray, isReadFunction } from '../types/abi';
 import { parseConstructorArgs, encodeConstructorSuffix, constructorArgKey } from '../utils/constructorArgs';
 import type { SaveDeploymentPayload } from '../utils/userData';
+import { creAllowsLiveDeploy } from '../utils/creClient';
+import { isCreGateEnabled } from '../utils/creConstants';
 
 interface CompileOutputProps {
   result: CompilationResult;
   code?: string;
+  contentHash?: string;
   canDeploy?: boolean;
   onDeployment?: (entry: SimulatedDeployment, extra?: Partial<SaveDeploymentPayload>) => void;
   deploymentResult?: SimulatedDeployment | null;
+  onOpenConfidentialAudit?: () => void;
 }
 
-const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, deploymentResult, canDeploy = true }) => {
+const CompileOutput: React.FC<CompileOutputProps> = ({
+  result,
+  contentHash,
+  onDeployment,
+  deploymentResult,
+  canDeploy = true,
+  onOpenConfidentialAudit,
+}) => {
   const { account, networkName, isConnected, connect } = useWeb3();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview', 'constructor']));
   const [isDeploying, setIsDeploying] = useState(false);
@@ -86,6 +97,25 @@ const CompileOutput: React.FC<CompileOutputProps> = ({ result, onDeployment, dep
     if (!isMetaMaskAvailable() || !window.ethereum) {
       setDeploymentError('MetaMask not detected.');
       return;
+    }
+
+    if (isCreGateEnabled()) {
+      const hash = contentHash || '';
+      const gate = creAllowsLiveDeploy(hash);
+      if (!gate.ok && !gate.needsConfirm) {
+        setDeploymentError(gate.message);
+        onOpenConfidentialAudit?.();
+        return;
+      }
+      if (gate.needsConfirm) {
+        const proceed = window.confirm(
+          `${gate.message}\n\nProceed with MetaMask deploy anyway?`
+        );
+        if (!proceed) {
+          onOpenConfidentialAudit?.();
+          return;
+        }
+      }
     }
 
     setIsDeploying(true);

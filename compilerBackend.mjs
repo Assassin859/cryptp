@@ -2,15 +2,33 @@ import express from 'express';
 import cors from 'cors';
 import solc from 'solc';
 import { resolveImports } from './resolveImports.mjs';
+import { handleCreAuditRequest } from './cre-proxy.mjs';
 
 const app = express();
-const port = 3001;
+const port = Number(process.env.PORT || 3001);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    cre: {
+      stub: true,
+      liveReady: Boolean(process.env.CRE_WORKFLOW_ID && process.env.CRE_TRIGGER_PRIVATE_KEY),
+    },
+  });
+});
+
+/** CRE Confidential audit gate — stub by default; live when CRE_* env set */
+app.post('/cre/audit', async (req, res) => {
+  try {
+    const result = await handleCreAuditRequest(req.body || {}, process.env);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
 });
 
 app.post('/compile', async (req, res) => {

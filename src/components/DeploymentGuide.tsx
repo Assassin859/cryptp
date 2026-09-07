@@ -84,8 +84,9 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
               <Wallet className="h-3.5 w-3.5" /> Step 6: Promote to Live Network
             </h4>
             <ol className="text-[10px] text-gray-400 space-y-1 list-decimal list-inside pl-1">
+              <li>Open <strong className="text-gray-300">Problem Audit → Confidential</strong> and run the CRE audit (required before live deploy)</li>
               <li>Connect MetaMask using the wallet button in the header</li>
-              <li>In the <strong className="text-gray-300">History</strong> tab, click <strong className="text-gray-300">Promote to Live Network</strong></li>
+              <li>In the <strong className="text-gray-300">History</strong> tab, click <strong className="text-gray-300">Promote to Live Network</strong> (blocked on CRE DENY)</li>
               <li>Confirm the transaction in MetaMask</li>
               <li>Get test ETH:
                 <div className="flex flex-col gap-1 pl-4 mt-1">
@@ -226,11 +227,12 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
             <div className="h-10 w-10 bg-yellow-500/20 rounded-lg flex items-center justify-center mr-3">
               <Rocket className="h-6 w-6 text-yellow-400" />
             </div>
-            <h2 className="text-xl font-semibold">Step 6: Promote to Live Network</h2>
+            <h2 className="text-xl font-semibold">Step 6: Confidential audit &amp; Promote</h2>
           </div>
           <ol className="text-gray-300 space-y-3 list-decimal list-inside">
+            <li className="pl-2">Open <strong>Problem Audit → Confidential</strong> and run the Chainlink CRE audit (TEE policy). Live deploy is gated on <strong>ALLOW</strong></li>
             <li className="pl-2">Click the <strong>Wallet</strong> button in the header to connect MetaMask</li>
-            <li className="pl-2">In the <strong>History</strong> tab, click <strong>Promote to Live Network</strong> on your sandbox deployment</li>
+            <li className="pl-2">In the <strong>History</strong> tab, click <strong>Promote to Live Network</strong> (or Output → Injected Provider)</li>
             <li className="pl-2">CryptP uses your MetaMask signer to broadcast the transaction — supports Sepolia, Base, and Ethereum Mainnet</li>
             <li className="pl-2">Get testnet ETH:
               <ul className="list-disc list-inside pl-5 pt-2">

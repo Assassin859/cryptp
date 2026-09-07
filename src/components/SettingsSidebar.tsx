@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, LogOut, Github, Chrome, Mail, User as UserIcon, Loader2, Key, Bot, Database, DownloadCloud, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Settings, LogOut, Github, Chrome, Mail, User as UserIcon, Loader2, Key, Bot, Database, DownloadCloud, Trash2, Eye, EyeOff, Lock } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabaseClient';
 import { getProjects, migrateWorkspacesToFiles, deleteProject } from '../utils/userData';
@@ -14,6 +14,13 @@ import {
   type GraphSourceMode,
   type GraphUserPrefs,
 } from '../utils/graphConstants';
+import {
+  getCreUserPrefs,
+  setCreUserPrefs,
+  getPlatformCreTriggerUrl,
+  getPlatformCreConsumerAddress,
+  type CreGateMode,
+} from '../utils/creConstants';
 
 interface SettingsSidebarProps {
   user: User | null;
@@ -108,6 +115,13 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
   const [graphEndpoint, setGraphEndpoint] = useState(() => getCustomGraphEndpoint());
   const [graphRegistry, setGraphRegistry] = useState(() => getCustomGraphRegistryAddress());
   const [graphSavedFlash, setGraphSavedFlash] = useState(false);
+
+  const [creGateEnabled, setCreGateEnabled] = useState(() => getCreUserPrefs().gateEnabled);
+  const [creMode, setCreMode] = useState<CreGateMode>(() => getCreUserPrefs().mode);
+  const [creTriggerUrl, setCreTriggerUrl] = useState(() => getCreUserPrefs().triggerUrl);
+  const [creWorkflowId, setCreWorkflowId] = useState(() => getCreUserPrefs().workflowId);
+  const [creConsumer, setCreConsumer] = useState(() => getCreUserPrefs().consumerAddress);
+  const [creSavedFlash, setCreSavedFlash] = useState(false);
 
   const saveGraphPrefs = async () => {
     const prefs = setGraphUserPrefs({
@@ -539,6 +553,104 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
                 className="w-full px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 rounded text-[10px] font-black uppercase tracking-widest transition-colors"
               >
                 {graphSavedFlash ? 'Saved' : 'Save Graph settings'}
+              </button>
+           </div>
+        </div>
+
+        {/* Chainlink CRE */}
+        <div>
+           <h3 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 pl-1 flex items-center gap-1.5">
+             <Lock className="size-3" /> Chainlink CRE
+           </h3>
+           <p className="text-[9px] text-gray-500 mb-3 pl-1 leading-relaxed">
+             Confidential audit gate before MetaMask deploy. Stub mode uses the local proxy policy;
+             live mode JWT-triggers your deployed CRE workflow when configured.
+             {!getPlatformCreTriggerUrl() && (
+               <span className="block mt-1 text-amber-500/80">Default trigger: localhost:3001/cre/audit</span>
+             )}
+           </p>
+           <div className="bg-[#121214] border border-gray-800 rounded-lg p-3 space-y-3">
+              <label className="flex items-center justify-between gap-2 text-[10px] text-gray-300">
+                <span className="font-bold uppercase tracking-wider">Gate live deploy</span>
+                <input
+                  type="checkbox"
+                  checked={creGateEnabled}
+                  onChange={(e) => setCreGateEnabled(e.target.checked)}
+                  className="accent-blue-500"
+                />
+              </label>
+              <div className="flex gap-1 p-0.5 rounded bg-[#1e1e1e] border border-[#333]">
+                <button
+                  type="button"
+                  onClick={() => setCreMode('stub')}
+                  className={`flex-1 px-2 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                    creMode === 'stub' ? 'bg-[#007acc] text-white' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Stub / staging
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreMode('live')}
+                  className={`flex-1 px-2 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                    creMode === 'live' ? 'bg-[#007acc] text-white' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Live CRE
+                </button>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">
+                  Trigger URL
+                </label>
+                <input
+                  type="url"
+                  value={creTriggerUrl}
+                  onChange={(e) => setCreTriggerUrl(e.target.value)}
+                  placeholder={getPlatformCreTriggerUrl() || 'http://localhost:3001/cre/audit'}
+                  className="w-full bg-[#1e1e1e] border border-[#333] rounded p-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">
+                  Workflow ID
+                </label>
+                <input
+                  type="text"
+                  value={creWorkflowId}
+                  onChange={(e) => setCreWorkflowId(e.target.value)}
+                  placeholder="64-char hex from cre workflow deploy"
+                  className="w-full bg-[#1e1e1e] border border-[#333] rounded p-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">
+                  AuditFirewallConsumer (Sepolia)
+                </label>
+                <input
+                  type="text"
+                  value={creConsumer}
+                  onChange={(e) => setCreConsumer(e.target.value)}
+                  placeholder={getPlatformCreConsumerAddress() || '0x…'}
+                  className="w-full bg-[#1e1e1e] border border-[#333] rounded p-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreUserPrefs({
+                    gateEnabled: creGateEnabled,
+                    mode: creMode,
+                    triggerUrl: creTriggerUrl,
+                    workflowId: creWorkflowId,
+                    consumerAddress: creConsumer,
+                  });
+                  setCreSavedFlash(true);
+                  window.setTimeout(() => setCreSavedFlash(false), 2000);
+                }}
+                className="w-full px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 rounded text-[10px] font-black uppercase tracking-widest transition-colors"
+              >
+                {creSavedFlash ? 'Saved' : 'Save CRE settings'}
               </button>
            </div>
         </div>

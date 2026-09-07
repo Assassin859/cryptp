@@ -1,0 +1,15 @@
+{
+  "name": "aethon-audit-firewall",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Aethon CRE Confidential Workflow: pre-deploy AI audit gate (handlerInTee)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-vm-modules --test src/policy.test.ts",
+    "simulate:hint": "echo Run from cre/: cre workflow simulate ./aethon-audit-firewall --project-root ./ --target=staging-settings --env ./.env"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

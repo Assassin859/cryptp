@@ -21,6 +21,9 @@ interface ImportMetaEnv {
   readonly VITE_DEFAULT_NETWORK?: string;
   readonly VITE_GRAPH_ENDPOINT?: string;
   readonly VITE_GRAPH_REGISTRY_ADDRESS?: string;
+  readonly VITE_CRE_TRIGGER_URL?: string;
+  readonly VITE_CRE_WORKFLOW_ID?: string;
+  readonly VITE_CRE_CONSUMER_ADDRESS?: string;
 }
 
 interface ImportMeta {
