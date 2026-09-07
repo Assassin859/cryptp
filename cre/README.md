@@ -22,6 +22,8 @@ cre workflow simulate ./aethon-audit-firewall --project-root ./ --target=staging
 
 Simulate evidence: `cre/evidence/cre-workflow-simulate-staging.txt` and `docs/cre-simulate-evidence.md`.
 
+**Triggers:** cron (index 0) audits `sampleSource` for simulate only. Live IDE audits use the **HTTP** trigger (`sourceCode` + `sourceHash` from `cre-proxy`).
+
 ## Deploy (when access enabled)
 
 ```bash
@@ -36,4 +38,4 @@ HTTP trigger production docs: https://docs.chain.link/cre/guides/workflow/using-
 
 ## IDE bridge
 
-Aethon calls `POST /cre/audit` on the compiler/CRE proxy (stub/local policy until workflow is deployed). Live gateway accept returns `accepted` (not gateable). Live MetaMask deploy is gated on a gateable stub `ALLOW`.
+Aethon calls `POST /cre/audit` on the compiler/CRE proxy (stub/local policy until workflow is deployed). Live mode JWT-triggers the HTTP handler with IDE payload; gateway accept returns `accepted` (not gateable until verdict polling). Live MetaMask deploy is gated on a gateable stub `ALLOW`.

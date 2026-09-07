@@ -70,11 +70,9 @@ export const detectPragmaVersion = (source: string): string | null => {
   const match = source.match(/pragma\s+solidity\s+[\^><=]*\s*([0-9]+\.[0-9]+\.[0-9]+)/);
   if (match && match[1]) {
     const version = match[1];
-    // Check if we have an exact or close match in our registry
+    // Exact registry key only — no silent remap to another solc.
     if (COMPILER_VERSIONS[version]) return version;
-    
-    // If it's a 0.8.x version we don't have, fallback to a stable 0.8.x
-    if (version.startsWith('0.8.')) return '0.8.28';
+    return null;
   }
   return null;
 };

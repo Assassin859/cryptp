@@ -219,7 +219,7 @@ export async function requestCreAudit(req: CreAuditRequest): Promise<CreAuditRes
     mode: mode === 'live' ? 'live' : 'stub',
     executionId: body.executionId,
     confidential: body.confidential === true,
-    gateable: body.gateable !== false,
+    gateable: body.gateable === true,
     at: body.at || Date.now(),
   };
 

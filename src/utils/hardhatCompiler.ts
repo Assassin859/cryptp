@@ -169,14 +169,41 @@ async function resolveRemoteImports(
   
   const seenUrls = new Set<string>();
 
+  const openZeppelinCdn = (importPath: string): { url: string; finalKey: string } | null => {
+    if (importPath.startsWith('@openzeppelin/contracts-upgradeable/')) {
+      const cleanPath = importPath.replace('@openzeppelin/contracts-upgradeable/', '');
+      return {
+        url: `https://cdn.jsdelivr.net/npm/@openzeppelin/contracts-upgradeable@5.0.0/${cleanPath}`,
+        finalKey: importPath,
+      };
+    }
+    if (importPath.startsWith('@openzeppelin/contracts/')) {
+      const cleanPath = importPath.replace('@openzeppelin/contracts/', '');
+      return {
+        url: `https://cdn.jsdelivr.net/npm/@openzeppelin/contracts@5.0.0/${cleanPath}`,
+        finalKey: importPath,
+      };
+    }
+    // Legacy bare @openzeppelin/... (treat as contracts/)
+    if (importPath.startsWith('@openzeppelin/') && !importPath.startsWith('@openzeppelin/contracts')) {
+      const cleanPath = importPath.replace('@openzeppelin/', '');
+      const finalKey = `@openzeppelin/contracts/${cleanPath}`;
+      return {
+        url: `https://cdn.jsdelivr.net/npm/@openzeppelin/contracts@5.0.0/${cleanPath}`,
+        finalKey,
+      };
+    }
+    return null;
+  };
+
   const fetchWithRecursion = async (importPath: string, parentPath?: string) => {
     let url: string | null = null;
     let finalKey: string | null = null;
 
-    if (importPath.startsWith('@openzeppelin/')) {
-      const cleanPath = importPath.replace('@openzeppelin/contracts/', '');
-      url = `https://cdn.jsdelivr.net/npm/@openzeppelin/contracts@5.0.0/${cleanPath}`;
-      finalKey = importPath;
+    const oz = openZeppelinCdn(importPath);
+    if (oz) {
+      url = oz.url;
+      finalKey = oz.finalKey;
     } else if (importPath.startsWith('erc721a/')) {
       const cleanPath = importPath.replace('erc721a/', '');
       url = `https://cdn.jsdelivr.net/npm/erc721a@4.3.0/${cleanPath}`;
@@ -188,14 +215,16 @@ async function resolveRemoteImports(
     } else if (parentPath && (importPath.startsWith('./') || importPath.startsWith('../'))) {
       finalKey = resolveRelativePath(parentPath, importPath);
 
-      if (parentPath.startsWith('@openzeppelin/')) {
+      if (parentPath.startsWith('@openzeppelin/contracts-upgradeable/')) {
+        const cleanPath = finalKey.replace('@openzeppelin/contracts-upgradeable/', '');
+        url = `https://cdn.jsdelivr.net/npm/@openzeppelin/contracts-upgradeable@5.0.0/${cleanPath}`;
+      } else if (parentPath.startsWith('@openzeppelin/')) {
         const cleanPath = finalKey.replace('@openzeppelin/contracts/', '');
         url = `https://cdn.jsdelivr.net/npm/@openzeppelin/contracts@5.0.0/${cleanPath}`;
       } else if (parentPath.startsWith('@oasis-protocol/sapphire-contracts/')) {
         const cleanPath = finalKey.replace('@oasis-protocol/sapphire-contracts/', '');
         url = `https://cdn.jsdelivr.net/npm/@oasis-protocol/sapphire-contracts@1.1.0/${cleanPath}`;
       } else if (workspaceFiles.has(finalKey)) {
-        // Local dependency resolution
         if (resolvedFiles.has(finalKey)) return;
         const content = workspaceFiles.get(finalKey)!;
         resolvedFiles.set(finalKey, content);
@@ -203,10 +232,9 @@ async function resolveRemoteImports(
         for (const ni of nested) await fetchWithRecursion(ni, finalKey);
         return;
       } else {
-        return; 
+        throw new Error(`Unresolved relative import "${importPath}" from "${parentPath}"`);
       }
     } else if (workspaceFiles.has(importPath)) {
-        // Flat local import
         if (resolvedFiles.has(importPath)) return;
         const content = workspaceFiles.get(importPath)!;
         resolvedFiles.set(importPath, content);
@@ -214,15 +242,20 @@ async function resolveRemoteImports(
         for (const ni of nested) await fetchWithRecursion(ni, importPath);
         return;
     } else {
-      return; 
+      throw new Error(`Unresolved import "${importPath}"${parentPath ? ` (from ${parentPath})` : ''}`);
     }
 
-    if (!finalKey || !url || resolvedFiles.has(finalKey) || seenUrls.has(url)) return;
+    if (!finalKey || !url) {
+      throw new Error(`Failed to map import "${importPath}" to a CDN URL`);
+    }
+    if (resolvedFiles.has(finalKey) || seenUrls.has(url)) return;
     seenUrls.add(url);
 
     try {
       const resp = await fetch(url);
-      if (!resp.ok) return;
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch "${importPath}" (${resp.status} ${resp.statusText}) from ${url}`);
+      }
       const content = await resp.text();
       resolvedFiles.set(finalKey, content);
 
@@ -231,12 +264,15 @@ async function resolveRemoteImports(
         await fetchWithRecursion(ni, finalKey);
       }
     } catch (e) {
-      console.error(`[Resolver] Failed to fetch dependency from ${url}:`, e);
+      if (e instanceof Error && e.message.startsWith('Unresolved')) throw e;
+      if (e instanceof Error && e.message.startsWith('Failed to fetch')) throw e;
+      throw new Error(
+        `Failed to fetch dependency "${importPath}" from ${url}: ${getErrorMessage(e)}`
+      );
     }
   };
 
   if (compileAll) {
-    // If compiling all, recursive scan EVERY file in the workspace
     for (const [name, content] of workspaceFiles) {
       if (!resolvedFiles.has(name)) {
         resolvedFiles.set(name, content);
@@ -245,7 +281,6 @@ async function resolveRemoteImports(
       }
     }
   } else {
-    // Standard: Recursive scan ONLY from the active sourceCode
     const mainImports = extractImports(sourceCode);
     for (const imp of mainImports) {
       await fetchWithRecursion(imp);
@@ -286,11 +321,37 @@ const compileInWorker = async (sourceCode: string, contractName: string = 'Contr
 
   compileInFlight = true;
   try {
+    const pragmaMatch = sourceCode.match(/pragma\s+solidity\s+[\^><=]*\s*([0-9]+\.[0-9]+\.[0-9]+)/);
+    const pragmaVersion = pragmaMatch?.[1] ?? null;
     const detectedVersion = forcedVersion || detectPragmaVersion(sourceCode);
-    const versionData = COMPILER_VERSIONS[detectedVersion || DEFAULT_VERSION];
 
-    if (versionData && versionData.url !== currentWorkerVersionUrl) {
-      console.log(`Switching compiler to version ${detectedVersion || DEFAULT_VERSION}...`);
+    if (forcedVersion && !COMPILER_VERSIONS[forcedVersion]) {
+      return compilationFailed(
+        `Unsupported Solidity version "${forcedVersion}". Available: ${Object.keys(COMPILER_VERSIONS).join(', ')}`,
+        sourceCode,
+        activeFileName
+      );
+    }
+    if (!forcedVersion && pragmaVersion && !COMPILER_VERSIONS[pragmaVersion]) {
+      return compilationFailed(
+        `Unsupported Solidity pragma ${pragmaVersion}. Available: ${Object.keys(COMPILER_VERSIONS).join(', ')}`,
+        sourceCode,
+        activeFileName
+      );
+    }
+
+    const versionKey = detectedVersion || DEFAULT_VERSION;
+    const versionData = COMPILER_VERSIONS[versionKey];
+    if (!versionData) {
+      return compilationFailed(
+        `Solidity version "${versionKey}" is not in the compiler registry.`,
+        sourceCode,
+        activeFileName
+      );
+    }
+
+    if (versionData.url !== currentWorkerVersionUrl) {
+      console.log(`Switching compiler to version ${versionKey}...`);
       try {
         const loadReply = await postWorkerRequest(
           { type: 'LOAD_VERSION', versionUrl: versionData.url },
@@ -312,7 +373,11 @@ const compileInWorker = async (sourceCode: string, contractName: string = 'Contr
     try {
       expandedFiles = await resolveRemoteImports(effectiveSource, projectFiles, compileAll);
     } catch (err) {
-      console.error('[Compiler] Remote resolution failed:', err);
+      return compilationFailed(
+        getErrorMessage(err) || 'Import resolution failed',
+        sourceCode,
+        activeFileName
+      );
     }
 
     const reply = await postWorkerRequest(

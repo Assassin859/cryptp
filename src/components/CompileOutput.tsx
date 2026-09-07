@@ -23,6 +23,7 @@ import { parseConstructorArgs, encodeConstructorSuffix, constructorArgKey } from
 import type { SaveDeploymentPayload } from '../utils/userData';
 import { creAllowsLiveDeploy } from '../utils/creClient';
 import { isCreGateEnabled } from '../utils/creConstants';
+import { SEPOLIA_CHAIN_ID } from '../utils/ethUsdConstants';
 
 interface CompileOutputProps {
   result: CompilationResult;
@@ -126,6 +127,13 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
+      const net = await provider.getNetwork();
+      if (Number(net.chainId) !== SEPOLIA_CHAIN_ID) {
+        setDeploymentError(
+          `Wrong network: MetaMask is on chain ${Number(net.chainId)}. Switch to Sepolia (${SEPOLIA_CHAIN_ID}) before deploying.`
+        );
+        return;
+      }
       const signer = await provider.getSigner();
       const abi = result.abi as InterfaceAbi;
       const factory = new ContractFactory(abi, result.bytecode, signer);
