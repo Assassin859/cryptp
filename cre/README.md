@@ -27,8 +27,11 @@ Simulate evidence: `cre/evidence/cre-workflow-simulate-staging.txt` and `docs/cr
 ## Deploy (when access enabled)
 
 ```bash
+# From repo root — print the address for http_trigger.authorizedKeys
+npm run cre:print-trigger
+
 cre account access   # request deploy if needed
-# Set http_trigger.authorizedKeys to the proxy signer address
+# Paste authorizedKeys into config.staging.json / config.production.json
 # Set evms[0].consumer_address to deployed AuditFirewallConsumer
 cre workflow register ./aethon-audit-firewall --project-root ./ --target=production-settings
 # Note Workflow ID → VITE_CRE_WORKFLOW_ID / CRE_WORKFLOW_ID for the Express proxy

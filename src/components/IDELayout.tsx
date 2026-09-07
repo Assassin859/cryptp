@@ -2010,6 +2010,11 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                         sourceCode={lastCompiledAuditSourceRef.current || code}
                         sourceHash={lastCompiledHashRef.current || undefined}
                         network={networkName || 'sepolia'}
+                        contractAddress={
+                          activeDeployment?.address ||
+                          simulations.find((s) => s.isRealChain && s.contractAddress)?.contractAddress ||
+                          undefined
+                        }
                       />
                     )}
                     {activeBottomTab === 'terminal' && (

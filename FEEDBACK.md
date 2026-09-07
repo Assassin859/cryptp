@@ -12,7 +12,7 @@ ETHOnline 2026 Continuity · Uniswap Foundation stack contribution.
 
 - Educational **CounterHook** (`contracts/hooks/CounterHook.sol`) — v4-style `beforeSwap` / `afterSwap` counters with self-contained type stubs so CryptP’s **browser solc** can compile without vendoring all of `v4-core`.
 - IDE wiring: template id `uniswap-v4-counter-hook` in `src/utils/contractTemplates.ts`, New File picker, Token Factory **Uniswap Continuity** inject.
-- Sepolia deploy script `npm run deploy:counter-hook` against PoolManager `0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`.
+- Sepolia **CREATE2** deploy via HookMiner (`scripts/hookMiner.ts` + `npm run deploy:counter-hook`) so the hook address encodes `BEFORE_SWAP | AFTER_SWAP` against PoolManager `0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`.
 - Docs: `docs/UNISWAP.md`.
 
 This is Continuity **tooling**: we extended an existing IDE’s compile→deploy loop for Uniswap v4 hooks, not a detached swap dapp.
@@ -29,7 +29,7 @@ This is Continuity **tooling**: we extended an existing IDE’s compile→deploy
 
 ## What was painful / failed expectations
 
-1. **Hook address flags vs naive `deploy()`** — Production PoolManager only invokes hooks whose CREATE2 address encodes permission bits. A normal Hardhat `deploy(poolManager)` works for Continuity “bytecode on Sepolia” demos but **does not** attach to live pools. Docs emphasize Foundry `deployCodeTo` / HookMiner; a **Hardhat + CREATE2 one-liner** in the first-hook guide would help IDE/tooling teams.
+1. **Hook address flags — solved for Continuity** — We initially hit the CREATE2 permission-bit requirement (plain `deploy()` does not attach to live PoolManager). CryptP now ships a Hardhat HookMiner + CREATE2 Deployer Proxy path (`scripts/hookMiner.ts`) so Sepolia demos encode `BEFORE_SWAP|AFTER_SWAP`. A **first-class Hardhat snippet** in Uniswap’s first-hook guide would still help other IDE/tooling teams.
 2. **Browser tooling gap** — No first-class path for “compile a BaseHook in the browser without bundling all of v4.” We wished for a published **minimal interface package** (or CDN solc remapping) aimed at educational / IDE embeds.
 3. **Constructor + sandbox auth** — Real hooks gate on `msg.sender == poolManager`. For IDE Interact demos we added `sandboxBumpAfterSwap()` clearly marked non-production. A documented “mock PoolManager for local teaching” pattern would reduce reinventing this.
 
@@ -50,6 +50,6 @@ This is Continuity **tooling**: we extended an existing IDE’s compile→deploy
 |----------|------|
 | Hook contract | [`contracts/hooks/CounterHook.sol`](contracts/hooks/CounterHook.sol) |
 | IDE template | [`src/utils/contractTemplates.ts`](src/utils/contractTemplates.ts) (`uniswapV4CounterHook`) |
-| Deploy | `npm run deploy:counter-hook` · [`scripts/deploy-counter-hook.ts`](scripts/deploy-counter-hook.ts) |
-| Sepolia CounterHook | [`0x99d2Cfa4aD9ba4302D263dfEd6E3372EE4940E9e`](https://sepolia.etherscan.io/address/0x99d2Cfa4aD9ba4302D263dfEd6E3372EE4940E9e) |
+| Deploy | `npm run deploy:counter-hook` · [`scripts/deploy-counter-hook.ts`](scripts/deploy-counter-hook.ts) · [`scripts/hookMiner.ts`](scripts/hookMiner.ts) |
+| Sepolia CounterHook (CREATE2) | [`0xC1FEA93ccD6A5B0F0B116E18Ba299198EAA040c0`](https://sepolia.etherscan.io/address/0xC1FEA93ccD6A5B0F0B116E18Ba299198EAA040c0) |
 | Guide | [`docs/UNISWAP.md`](docs/UNISWAP.md) |

@@ -7,7 +7,7 @@ CryptP uses a **platform-managed** Sepolia subgraph so users index and query con
 | Store | Holds |
 |-------|--------|
 | **Supabase** | Auth, workspaces, source files, compile artifacts, sandbox/live deploy *recipes*, gas heatmaps, AI/RPC keys, **`graph_prefs`** (Studio URL / mode — not events) |
-| **The Graph** | Indexed on-chain events (`ValueChanged`, registration) after a contract is registered |
+| **The Graph** | Indexed on-chain events (`ValueChanged`, registration) after a contract is registered; also feeds **Confidential** audit context in Problem Audit |
 
 Do **not** add Graph event rows to Supabase. `deployments` rows are for IDE replay/promote only.
 
@@ -20,6 +20,7 @@ Do **not** add Graph event rows to Supabase. `deployments` rows are for IDE repl
 3. Click **Register for indexing** (one MetaMask tx to `CryptPIndexRegistry`).
 4. In **Interaction**, call `setValue`.
 5. Back in **Indexed**, click **Refresh** to see `ValueChanged` rows from The Graph.
+6. **Problem Audit → Confidential** also loads The Graph context for the active Sepolia contract (registration + latest `ValueChanged` events) so Continuity audit UX uses live indexed data—not only a history table.
 
 Default path uses the CryptP platform endpoint (`VITE_GRAPH_*`). No Studio account required for that path.
 

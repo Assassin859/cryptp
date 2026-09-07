@@ -7,6 +7,7 @@ import { isCreGateEnabled, getCreConsumerAddress, getCreWorkflowId } from '../ut
 import { recordCreVerdictOnchain } from '../utils/creConsumer';
 import { useWeb3 } from '../context/Web3Context';
 import { getErrorMessage } from '../utils/errorMessage';
+import { loadGraphAuditContext, type GraphAuditContext } from '../utils/graphContext';
 
 interface SecurityAuditProps {
   report: SecurityReport | null;
@@ -16,6 +17,8 @@ interface SecurityAuditProps {
   sourceCode?: string;
   sourceHash?: string;
   network?: string;
+  /** Sepolia contract to pull The Graph Indexed history for Continuity context */
+  contractAddress?: string;
 }
 
 const SeverityBadge: React.FC<{ severity: string }> = ({ severity }) => {
@@ -64,6 +67,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
   sourceCode = '',
   sourceHash = '',
   network = 'sepolia',
+  contractAddress = '',
 }) => {
   const { signer, isConnected, connect } = useWeb3();
   const [internalTab, setInternalTab] = useState<'automated' | 'checklist' | 'confidential'>('automated');
@@ -71,6 +75,8 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
   const [creError, setCreError] = useState<string | null>(null);
   const [recordBusy, setRecordBusy] = useState(false);
   const [recordTx, setRecordTx] = useState<string | null>(null);
+  const [graphCtx, setGraphCtx] = useState<GraphAuditContext | null>(null);
+  const [graphBusy, setGraphBusy] = useState(false);
   const [creResult, setCreResult] = useState<CreAuditResult | null>(
     () => (sourceHash ? getCachedCreVerdict(sourceHash) || null : null)
   );
@@ -80,6 +86,21 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
     setCreError(null);
     setRecordTx(null);
   }, [sourceHash]);
+
+  useEffect(() => {
+    if (internalTab !== 'confidential') return;
+    let cancelled = false;
+    setGraphBusy(true);
+    void loadGraphAuditContext(contractAddress || undefined).then((ctx) => {
+      if (!cancelled) {
+        setGraphCtx(ctx);
+        setGraphBusy(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [internalTab, contractAddress]);
 
   const runConfidential = async () => {
     if (!sourceCode || !sourceHash) {
@@ -247,6 +268,26 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                   registered. Live MetaMask deploy uses a client-side gate when enabled in Settings
                   {isCreGateEnabled() ? ' (on)' : ' (off)'} — not a hard enclave firewall.
                 </p>
+              </div>
+              <div className="p-3 bg-gray-900 border border-gray-800 rounded space-y-1.5">
+                <p className="text-[10px] font-bold text-gray-200 uppercase tracking-widest">
+                  The Graph · Indexed context
+                </p>
+                {graphBusy ? (
+                  <p className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Loading subgraph…
+                  </p>
+                ) : (
+                  <pre className="text-[9px] font-mono text-gray-500 whitespace-pre-wrap leading-relaxed">
+                    {graphCtx?.summary ||
+                      'Select a Sepolia deployment (Interact / History) to load Indexed events.'}
+                  </pre>
+                )}
+                {!contractAddress && (
+                  <p className="text-[9px] text-gray-600">
+                    Tip: promote or deploy to Sepolia, then open Interact so this panel can query ValueChanged.
+                  </p>
+                )}
               </div>
               <button
                 type="button"

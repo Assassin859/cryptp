@@ -101,9 +101,17 @@ Continuity upgrade: Analytics **Market Cost Projection** prefers Chainlink ETH/U
 | Item | Value |
 |------|--------|
 | Feed (Sepolia ETH/USD) | [`0x694AA1769357215DE4FAC081bf1f309aDC325306`](https://sepolia.etherscan.io/address/0x694AA1769357215DE4FAC081bf1f309aDC325306) |
-| Consumer | [`0x2AC2d2b4ab2Ed6447D888031E6e6d41dBCc4005A`](https://sepolia.etherscan.io/address/0x2AC2d2b4ab2Ed6447D888031E6e6d41dBCc4005A) — [`EthUsdConsumer.sol`](../contracts/EthUsdConsumer.sol) `settleLatestPrice()` |
+| Consumer | [`0x22c9F5385b2F01635e8cA36A8b2E5BeE9b00389b`](https://sepolia.etherscan.io/address/0x22c9F5385b2F01635e8cA36A8b2E5BeE9b00389b) — [`EthUsdConsumer.sol`](../contracts/EthUsdConsumer.sol) `settleLatestPrice()` / stale-safe `getLivePrice()` |
 | Deploy | `npm run deploy:eth-usd-consumer` |
 | Env | `VITE_ETH_USD_CONSUMER_ADDRESS` (Vite / Railway frontend) |
 | IDE | Analytics → Market Cost → **Settle ETH/USD on Sepolia** |
 
-`PriceService` reads live price via consumer `getLivePrice()` (or the feed proxy if consumer unset). Settling is the Continuity **onchain state change**.
+`PriceService` reads live ETH/USD via aggregator `latestRoundData` (through `consumer.feed()` when set) with the same staleness checks as settle. Settling is the Continuity **onchain state change**.
+
+## Live CRE HTTP trigger checklist
+
+1. `node scripts/cre-print-trigger-address.mjs` (or `npm run cre:print-trigger`) — prints the EVM address for `CRE_TRIGGER_PRIVATE_KEY`.
+2. Set that address on `http_trigger.authorizedKeys` in [`cre/aethon-audit-firewall/config.staging.json`](../cre/aethon-audit-firewall/config.staging.json) / `config.production.json`.
+3. `cre account access` → `cre workflow register ./aethon-audit-firewall ...`
+4. Set `CRE_WORKFLOW_ID` / `VITE_CRE_WORKFLOW_ID` on the proxy + frontend.
+5. Live mode JWT-triggers IDE `sourceCode`/`sourceHash`; gateway `accepted` is not gateable until verdict polling exists — use Stub for unlockable ALLOW.
