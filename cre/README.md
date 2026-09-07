@@ -1,6 +1,10 @@
 # Aethon × Chainlink CRE — Confidential Audit Firewall
 
-Continuity upgrade: pre–MetaMask-deploy **AI audit gate** using CRE **Confidential Workflows** (`handlerInTee`). Proprietary policy + API secrets stay in TEE; only `ALLOW` / `DENY` / `MANUAL_REVIEW` + `riskMask` leave the enclave.
+Continuity upgrade: pre–MetaMask-deploy **AI audit gate** aimed at CRE **Confidential Workflows** (`handlerInTee`).
+
+**Today (staging):** local proprietary policy via IDE proxy (`POST /cre/audit` stub). Not a TEE verdict.
+
+**Target (registered CRE workflow):** policy + API secrets in TEE; only `ALLOW` / `DENY` / `MANUAL_REVIEW` + `riskMask` leave the enclave.
 
 ## Staging first
 
@@ -36,4 +40,4 @@ HTTP trigger production docs: https://docs.chain.link/cre/guides/workflow/using-
 
 ## IDE bridge
 
-Aethon calls `POST /cre/audit` on the compiler/CRE proxy (stub mode until workflow is deployed). Live MetaMask deploy is gated on `ALLOW`.
+Aethon calls `POST /cre/audit` on the compiler/CRE proxy (stub/local policy until workflow is deployed). Live gateway accept returns `accepted` (not gateable). Live MetaMask deploy is gated on a gateable stub `ALLOW`.

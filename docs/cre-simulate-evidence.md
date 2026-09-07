@@ -2,9 +2,9 @@
 
 ## Status
 
-Aethon ships a **staging-first** Confidential audit workflow under [`cre/aethon-audit-firewall/`](../cre/aethon-audit-firewall/).
+Aethon ships a **staging-first** audit workflow under [`cre/aethon-audit-firewall/`](../cre/aethon-audit-firewall/).
 
-Local policy evidence (no CRE CLI):
+Local policy evidence (no CRE CLI) matches the IDE stub path — **not** a live TEE execution:
 
 ```bash
 node cre/evidence/run-demo.mjs
@@ -32,7 +32,7 @@ Paste the CLI transcript below when available:
 
 | Requirement | Location |
 |-------------|----------|
-| `handlerInTee` / confidential handler | [`cre/aethon-audit-firewall/src/workflow.ts`](../cre/aethon-audit-firewall/src/workflow.ts) |
-| Proprietary policy in TEE | [`cre/aethon-audit-firewall/src/policy.ts`](../cre/aethon-audit-firewall/src/policy.ts) |
+| `handlerInTee` / confidential handler (**target** when registered) | [`cre/aethon-audit-firewall/src/workflow.ts`](../cre/aethon-audit-firewall/src/workflow.ts) |
+| Proprietary policy (local staging today; TEE when CRE registered) | [`cre/aethon-audit-firewall/src/policy.ts`](../cre/aethon-audit-firewall/src/policy.ts) |
 | IDE gate | `CompileOutput` MetaMask deploy + `IDELayout` promote |
 | Onchain state change | [`contracts/AuditFirewallConsumer.sol`](../contracts/AuditFirewallConsumer.sol) |

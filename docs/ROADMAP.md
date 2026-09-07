@@ -71,7 +71,7 @@ CryptP is a high-performance, browser-native IDE designed to transcend the compl
 
 *ETHOnline Continuity — Chainlink first, then Uniswap.*
 
-- **Chainlink CRE Confidential Audit Gate**: Pre-live-deploy TEE policy (`cre/aethon-audit-firewall`), IDE Problem Audit → Confidential, MetaMask gate, `AuditFirewallConsumer` on Sepolia. See [docs/CHAINLINK.md](CHAINLINK.md).
+- **Chainlink CRE Confidential Audit Gate**: Pre-live-deploy staging gate via local proprietary policy (`cre-proxy` / `cre/aethon-audit-firewall`); TEE/`handlerInTee` target when CRE registered. IDE Problem Audit → Confidential, MetaMask gate, `AuditFirewallConsumer` on Sepolia. See [docs/CHAINLINK.md](CHAINLINK.md).
 - **Chainlink Price Feeds (next)**: Onchain ETH/USD consumer + Analytics source upgrade.
 - **DeFi Library Manager**: One-click import of Aave, Uniswap, and Chainlink standard interfaces (Uniswap partner next).
 - **Oracle Simulation**: Feed mock prices into the local EVM to test liquidation logic (after Feeds).
