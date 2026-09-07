@@ -1,73 +1,71 @@
 /**
  * CRE confidential audit trigger proxy.
- * Stub mode: runs proprietary policy locally (same as cre/aethon-audit-firewall).
+ * Stub mode: runs proprietary policy locally (same as cre/shared/deployPolicy.mjs).
  * Live mode: JWT-signs workflows.execute to CRE gateway when CRE_WORKFLOW_ID + CRE_TRIGGER_PRIVATE_KEY set.
+ * Live never fabricates a local verdict labeled as "live".
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { Wallet } from 'ethers';
+import {
+  evaluateDeployPolicy,
+  verdictToCode,
+} from './cre/shared/deployPolicy.mjs';
 
-function emptyFlags() {
+/** Normalize hex hash (strip 0x, lowercase). */
+export function normalizeContentHash(hash) {
+  return String(hash || '')
+    .trim()
+    .replace(/^0x/i, '')
+    .toLowerCase();
+}
+
+export function sha256HexUtf8(text) {
+  return createHash('sha256').update(String(text ?? ''), 'utf8').digest('hex');
+}
+
+/**
+ * Reject audits where client hash does not match source body (gate-bypass fix).
+ */
+export function assertSourceHashBinding(sourceCode, sourceHash) {
+  const expected = sha256HexUtf8(sourceCode);
+  const got = normalizeContentHash(sourceHash);
+  if (!got) {
+    const err = new Error('Missing sourceHash');
+    err.statusCode = 400;
+    err.code = 'hash_mismatch';
+    throw err;
+  }
+  if (expected !== got) {
+    const err = new Error(
+      'sourceHash does not match sha256(sourceCode). Recompile and audit the compiled source only.'
+    );
+    err.statusCode = 400;
+    err.code = 'hash_mismatch';
+    throw err;
+  }
+  return expected;
+}
+
+export function evaluateDeployPolicyStub(input) {
+  const result = evaluateDeployPolicy({
+    sourceCode: input?.sourceCode || '',
+    sourceHash: input?.sourceHash || '',
+    contractAddress: input?.contractAddress,
+    network: input?.network,
+    primaryRecommendation: input?.primaryRecommendation,
+    secondaryRecommendation: input?.secondaryRecommendation,
+    primaryConfidence: input?.primaryConfidence,
+    secondaryConfidence: input?.secondaryConfidence,
+  });
   return {
-    obfuscatedTax: false,
-    privilegeEscalation: false,
-    externalCallRisk: false,
-    logicBomb: false,
-  };
-}
-
-function scanSourceHeuristics(source) {
-  const flags = emptyFlags();
-  const s = (source || '').toLowerCase();
-  if (/tax|fee|reflection/.test(s) && /onlyowner|owner\s*\(/.test(s) && /transfer|swap/.test(s)) {
-    flags.obfuscatedTax = true;
-  }
-  if (/selfdestruct|delegatecall/.test(s) || (/onlyowner/.test(s) && /mint|withdraw|drain|rug/.test(s))) {
-    flags.privilegeEscalation = true;
-  }
-  if (/\.call\s*\{|\.call\(|delegatecall|staticcall/.test(s)) {
-    flags.externalCallRisk = true;
-  }
-  if (/block\.timestamp|blockhash|tx\.origin/.test(s) && /random|lottery|gambl/.test(s)) {
-    flags.logicBomb = true;
-  }
-  return flags;
-}
-
-function riskFlagsToMask(flags) {
-  let mask = 0;
-  if (flags.obfuscatedTax) mask |= 1 << 0;
-  if (flags.privilegeEscalation) mask |= 1 << 1;
-  if (flags.externalCallRisk) mask |= 1 << 2;
-  if (flags.logicBomb) mask |= 1 << 3;
-  return mask;
-}
-
-function anyRisk(flags) {
-  return flags.obfuscatedTax || flags.privilegeEscalation || flags.externalCallRisk || flags.logicBomb;
-}
-
-export function evaluateDeployPolicyStub({ sourceCode, sourceHash }) {
-  const heuristic = scanSourceHeuristics(sourceCode || '');
-  const mask = riskFlagsToMask(heuristic);
-  if (anyRisk(heuristic)) {
-    return {
-      verdict: 'DENY',
-      verdictCode: 2,
-      riskMask: mask,
-      reason: 'Risk flag or model DENY — live deploy blocked',
-      sourceHash: sourceHash || '',
-      confidential: true,
-      mode: 'stub',
-    };
-  }
-  return {
-    verdict: 'ALLOW',
-    verdictCode: 1,
-    riskMask: 0,
-    reason: 'No risk flags; dual models allow with sufficient confidence',
-    sourceHash: sourceHash || '',
-    confidential: true,
+    verdict: result.verdict,
+    verdictCode: verdictToCode(result.verdict),
+    riskMask: result.riskMask,
+    reason: result.reason,
+    sourceHash: input?.sourceHash || '',
+    confidential: false,
     mode: 'stub',
+    confidence: result.confidence,
   };
 }
 
@@ -121,6 +119,9 @@ export async function createCreRequestJwt(requestBody, privateKey) {
   };
 }
 
+/**
+ * Trigger CRE workflow. Returns accepted/pending — never a fabricated local verdict as "live".
+ */
 export async function triggerLiveCreAudit(input, env = process.env) {
   const workflowId = (env.CRE_WORKFLOW_ID || env.VITE_CRE_WORKFLOW_ID || '').trim();
   const privateKey = (env.CRE_TRIGGER_PRIVATE_KEY || '').trim();
@@ -128,7 +129,9 @@ export async function triggerLiveCreAudit(input, env = process.env) {
     (env.CRE_GATEWAY_URL || '').trim() || 'https://01.gateway.zone-a.cre.chain.link';
 
   if (!workflowId || !privateKey) {
-    throw new Error('Live CRE requires CRE_WORKFLOW_ID and CRE_TRIGGER_PRIVATE_KEY');
+    const err = new Error('Live CRE requires CRE_WORKFLOW_ID and CRE_TRIGGER_PRIVATE_KEY');
+    err.statusCode = 503;
+    throw err;
   }
 
   const requestBody = {
@@ -162,22 +165,29 @@ export async function triggerLiveCreAudit(input, env = process.env) {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`CRE gateway non-JSON (${res.status}): ${text.slice(0, 200)}`);
+    const err = new Error(`CRE gateway non-JSON (${res.status}): ${text.slice(0, 200)}`);
+    err.statusCode = 502;
+    throw err;
   }
 
   if (!res.ok || json.error) {
-    throw new Error(json.error?.message || `CRE gateway HTTP ${res.status}`);
+    const err = new Error(json.error?.message || `CRE gateway HTTP ${res.status}`);
+    err.statusCode = 502;
+    throw err;
   }
 
-  // Gateway accepts async execution; until result polling exists, fall back to stub policy
-  // for immediate IDE gate, attaching execution id for CRE UI.
-  const stub = evaluateDeployPolicyStub(input);
   return {
-    ...stub,
-    mode: 'live',
+    mode: 'accepted',
+    verdict: null,
+    verdictCode: 0,
+    riskMask: 0,
+    reason:
+      'CRE workflow accepted. Verdict polling is not wired yet — switch to Stub/staging for a gateable local policy result, or wait for execution result support.',
+    sourceHash: input.sourceHash || '',
     executionId: json.result?.workflow_execution_id,
     gatewayStatus: json.result?.status || 'ACCEPTED',
     confidential: true,
+    gateable: false,
     at: Date.now(),
   };
 }
@@ -192,20 +202,13 @@ export async function handleCreAuditRequest(body, env = process.env) {
     abiHint: body?.abiHint,
   };
 
+  const boundHash = assertSourceHashBinding(input.sourceCode, input.sourceHash);
+  input.sourceHash = boundHash;
+
   if (mode === 'live') {
-    try {
-      return await triggerLiveCreAudit(input, env);
-    } catch (e) {
-      // Fall back to stub so IDE remains usable while deploy access is pending
-      const stub = evaluateDeployPolicyStub(input);
-      return {
-        ...stub,
-        mode: 'stub',
-        liveError: e instanceof Error ? e.message : String(e),
-        at: Date.now(),
-      };
-    }
+    // Fail closed — do not silently return stub on live errors.
+    return await triggerLiveCreAudit(input, env);
   }
 
-  return { ...evaluateDeployPolicyStub(input), at: Date.now() };
+  return { ...evaluateDeployPolicyStub(input), gateable: true, at: Date.now() };
 }

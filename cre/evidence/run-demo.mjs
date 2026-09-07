@@ -17,9 +17,9 @@ function evaluate(sourceCode) {
     verdictCode: deny ? 2 : 1,
     riskMask: deny ? 2 : 0,
     reason: deny
-      ? 'Risk flag or model DENY — live deploy blocked'
-      : 'No risk flags; dual models allow with sufficient confidence',
-    confidential: true,
+      ? 'Local staging policy flagged risk patterns — live deploy blocked'
+      : 'Local staging policy found no flagged patterns (not a TEE/CRE verdict)',
+    confidential: false,
     mode: 'stub-staging',
   };
 }
@@ -31,7 +31,7 @@ const bad = evaluate('contract Bad { function x() public { selfdestruct(payable(
 
 const report = {
   generatedAt: new Date().toISOString(),
-  note: 'Local staging evidence for Aethon CRE Confidential audit policy (handlerInTee target). Replace with cre workflow simulate transcript when CLI is available.',
+  note: 'Local staging evidence for Aethon CRE audit policy (proxy stub today; handlerInTee target when CRE registered). Replace with cre workflow simulate transcript when CLI is available.',
   cases: [
     { name: 'SimpleStorage', ...clean },
     { name: 'selfdestruct', ...bad },

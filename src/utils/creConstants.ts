@@ -69,6 +69,8 @@ export function setCreUserPrefs(prefs: Partial<CreUserPrefs>): CreUserPrefs {
   return next;
 }
 
+const DEV_CRE_TRIGGER_FALLBACK = 'http://localhost:3001/cre/audit';
+
 export function getPlatformCreTriggerUrl(): string {
   return (import.meta.env.VITE_CRE_TRIGGER_URL as string | undefined)?.trim() || '';
 }
@@ -81,9 +83,21 @@ export function getPlatformCreConsumerAddress(): string {
   return (import.meta.env.VITE_CRE_CONSUMER_ADDRESS as string | undefined)?.trim() || '';
 }
 
+/** Optional shared secret for POST /cre/audit (must match server CRE_AUDIT_TOKEN). */
+export function getCreAuditToken(): string {
+  return (import.meta.env.VITE_CRE_AUDIT_TOKEN as string | undefined)?.trim() || '';
+}
+
+/**
+ * Effective trigger URL for fetch.
+ * Prefs → platform env → DEV-only localhost. Production never invents localhost.
+ */
 export function getCreTriggerUrl(): string {
   const prefs = getCreUserPrefs();
-  return prefs.triggerUrl || getPlatformCreTriggerUrl() || 'http://localhost:3001/cre/audit';
+  const explicit = prefs.triggerUrl || getPlatformCreTriggerUrl();
+  if (explicit) return explicit;
+  if (import.meta.env.DEV) return DEV_CRE_TRIGGER_FALLBACK;
+  return '';
 }
 
 export function getCreWorkflowId(): string {
@@ -100,9 +114,14 @@ export function isCreGateEnabled(): boolean {
   return getCreUserPrefs().gateEnabled;
 }
 
-/** Configured enough to call the proxy (stub always works against local compiler backend). */
+/**
+ * True when prefs or VITE_CRE_TRIGGER_URL is set.
+ * In DEV, the localhost compiler fallback also counts so local `npm run compiler` works.
+ */
 export function isCreConfigured(): boolean {
-  return Boolean(getCreTriggerUrl());
+  const prefs = getCreUserPrefs();
+  if (prefs.triggerUrl || getPlatformCreTriggerUrl()) return true;
+  return Boolean(import.meta.env.DEV);
 }
 
 export const CRE_CONSUMER_ABI = [

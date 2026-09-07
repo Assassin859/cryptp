@@ -24,6 +24,7 @@ interface ImportMetaEnv {
   readonly VITE_CRE_TRIGGER_URL?: string;
   readonly VITE_CRE_WORKFLOW_ID?: string;
   readonly VITE_CRE_CONSUMER_ADDRESS?: string;
+  readonly VITE_CRE_AUDIT_TOKEN?: string;
 }
 
 interface ImportMeta {

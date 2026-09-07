@@ -29,8 +29,6 @@ temp_chrome_profile/
 scratch/
 *.bin
 temp*.sol
-compilerBackend.mjs
-resolveImports.mjs
 
 # Hardhat build outputs
 artifacts/
