@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SecurityReport } from '../utils/securityScanner';
 import { ShieldCheck, ShieldAlert, ShieldX, Info, CheckCircle2, AlertTriangle, ExternalLink, Zap, ClipboardCheck, Lock, Loader2, type LucideIcon } from 'lucide-react';
 import SecurityChecklist from './SecurityChecklist';
 import { requestCreAudit, getCachedCreVerdict, type CreAuditResult } from '../utils/creClient';
 import { isCreGateEnabled, getCreConsumerAddress, getCreWorkflowId } from '../utils/creConstants';
+import { recordCreVerdictOnchain } from '../utils/creConsumer';
+import { useWeb3 } from '../context/Web3Context';
+import { getErrorMessage } from '../utils/errorMessage';
 
 interface SecurityAuditProps {
   report: SecurityReport | null;
@@ -62,12 +65,21 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
   sourceHash = '',
   network = 'sepolia',
 }) => {
+  const { signer, isConnected, connect } = useWeb3();
   const [internalTab, setInternalTab] = useState<'automated' | 'checklist' | 'confidential'>('automated');
   const [creBusy, setCreBusy] = useState(false);
   const [creError, setCreError] = useState<string | null>(null);
+  const [recordBusy, setRecordBusy] = useState(false);
+  const [recordTx, setRecordTx] = useState<string | null>(null);
   const [creResult, setCreResult] = useState<CreAuditResult | null>(
     () => (sourceHash ? getCachedCreVerdict(sourceHash) || null : null)
   );
+
+  useEffect(() => {
+    setCreResult(sourceHash ? getCachedCreVerdict(sourceHash) || null : null);
+    setCreError(null);
+    setRecordTx(null);
+  }, [sourceHash]);
 
   const runConfidential = async () => {
     if (!sourceCode || !sourceHash) {
@@ -76,6 +88,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
     }
     setCreBusy(true);
     setCreError(null);
+    setRecordTx(null);
     try {
       const result = await requestCreAudit({
         sourceCode,
@@ -87,6 +100,35 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
       setCreError(e instanceof Error ? e.message : String(e));
     } finally {
       setCreBusy(false);
+    }
+  };
+
+  const recordOnchain = async () => {
+    const consumer = getCreConsumerAddress();
+    if (!creResult?.gateable || !creResult.verdict || !consumer) return;
+    if (!isConnected || !signer) {
+      setCreError('Connect MetaMask to record the verdict on Sepolia.');
+      await connect();
+      return;
+    }
+    setRecordBusy(true);
+    setCreError(null);
+    try {
+      const { txHash } = await recordCreVerdictOnchain({
+        signer,
+        consumerAddress: consumer,
+        verdictCode: creResult.verdictCode,
+        riskMask: creResult.riskMask,
+        sourceHash: creResult.sourceHash,
+      });
+      setRecordTx(txHash);
+    } catch (e) {
+      setCreError(
+        getErrorMessage(e) ||
+          'recordVerdict failed — wallet must be owner or authorizedReporter on the consumer.'
+      );
+    } finally {
+      setRecordBusy(false);
     }
   };
 
@@ -109,15 +151,10 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
     );
   }
 
-  if (!report || report.score === -1) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center p-4">
-        <Zap className="h-8 w-8 mb-2 opacity-20" />
-        <p className="text-[10px] uppercase tracking-widest font-bold">Waiting for Meaningful Code</p>
-        <p className="text-[9px] mt-1 opacity-50">Write more logic to trigger a security audit.</p>
-      </div>
-    );
-  }
+  // score === -1 / missing report: still show Confidential (deploy gate). Empty state is Report-tab only.
+  const reportReady = Boolean(report && report.score !== -1);
+  const displayScore = reportReady && report ? report.score : null;
+  const summary = reportReady && report ? report.summary : { high: 0, critical: 0, medium: 0, low: 0 };
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return 'text-green-400';
@@ -125,40 +162,45 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
     return 'text-red-400';
   };
 
-  const getScoreBg = (score: number) => {
+  const getScoreBg = (score: number | null) => {
+    if (score === null) return 'bg-gray-500/10 border-gray-500/30';
     if (score >= 90) return 'bg-green-500/10 border-green-500/30';
     if (score >= 70) return 'bg-yellow-500/10 border-yellow-500/30';
     return 'bg-red-500/10 border-red-500/30';
   };
 
   const verdictColor =
-    creResult?.verdict === 'ALLOW'
-      ? 'text-green-400'
-      : creResult?.verdict === 'DENY'
-        ? 'text-red-400'
-        : 'text-yellow-400';
+    creResult?.mode === 'accepted' || !creResult?.verdict
+      ? 'text-yellow-400'
+      : creResult.verdict === 'ALLOW'
+        ? 'text-green-400'
+        : creResult.verdict === 'DENY'
+          ? 'text-red-400'
+          : 'text-yellow-400';
 
   return (
     <div className="flex flex-col h-full bg-gray-950">
       <div className="flex-1 flex overflow-hidden">
         <div className="w-48 border-r border-gray-800 p-3 flex flex-col gap-4 bg-gray-900/50 shrink-0">
-          <div className={`p-3 rounded-lg border flex flex-col items-center justify-center gap-1 ${getScoreBg(report.score)} shadow-inner`}>
-             <span className={`text-2xl font-black ${getScoreColor(report.score)}`}>{report.score}</span>
+          <div className={`p-3 rounded-lg border flex flex-col items-center justify-center gap-1 ${getScoreBg(displayScore)} shadow-inner`}>
+             <span className={`text-2xl font-black ${displayScore === null ? 'text-gray-500' : getScoreColor(displayScore)}`}>
+               {displayScore === null ? '—' : displayScore}
+             </span>
              <span className="text-[9px] font-bold uppercase tracking-widest text-gray-500">Security Score</span>
           </div>
 
           <div className="space-y-1.5">
              <div className="flex items-center justify-between px-2 py-1 bg-red-500/5 border border-red-500/10 rounded">
                 <span className="text-[9px] font-bold text-gray-500 uppercase">High</span>
-                <span className="text-[10px] font-black text-red-400">{report.summary.high + report.summary.critical}</span>
+                <span className="text-[10px] font-black text-red-400">{summary.high + summary.critical}</span>
              </div>
              <div className="flex items-center justify-between px-2 py-1 bg-orange-500/5 border border-orange-500/10 rounded">
                 <span className="text-[9px] font-bold text-gray-500 uppercase">Med</span>
-                <span className="text-[10px] font-black text-orange-400">{report.summary.medium}</span>
+                <span className="text-[10px] font-black text-orange-400">{summary.medium}</span>
              </div>
              <div className="flex items-center justify-between px-2 py-1 bg-yellow-500/5 border border-yellow-500/10 rounded">
                 <span className="text-[9px] font-bold text-gray-500 uppercase">Low</span>
-                <span className="text-[10px] font-black text-yellow-500">{report.summary.low}</span>
+                <span className="text-[10px] font-black text-yellow-500">{summary.low}</span>
              </div>
           </div>
           
@@ -197,12 +239,13 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
             <div className="space-y-3 pb-4">
               <div className="p-3 bg-gray-900 border border-gray-800 rounded">
                 <p className="text-[10px] font-bold text-gray-200 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                  <Lock className="h-3 w-3 text-indigo-400" /> Chainlink CRE Confidential
+                  <Lock className="h-3 w-3 text-indigo-400" /> Chainlink CRE gate (staging)
                 </p>
                 <p className="text-[10px] text-gray-500 leading-relaxed">
-                  Proprietary audit policy and API secrets run in a TEE (<code className="text-gray-400">handlerInTee</code>).
-                  Only the verdict leaves the enclave. Live MetaMask deploy is gated when enabled in Settings
-                  {isCreGateEnabled() ? ' (on)' : ' (off)'}.
+                  Stub mode runs Aethon&apos;s proprietary policy locally via the audit proxy (not inside a TEE yet).
+                  TEE / <code className="text-gray-400">handlerInTee</code> is the target once a CRE workflow is
+                  registered. Live MetaMask deploy uses a client-side gate when enabled in Settings
+                  {isCreGateEnabled() ? ' (on)' : ' (off)'} — not a hard enclave firewall.
                 </p>
               </div>
               <button
@@ -212,7 +255,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white rounded text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
               >
                 {creBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
-                {creBusy ? 'Running confidential audit…' : 'Run confidential audit'}
+                {creBusy ? 'Running audit…' : 'Run staging / CRE audit'}
               </button>
               {creError && (
                 <p className="text-[10px] text-red-400 border border-red-500/30 bg-red-500/10 rounded p-2">{creError}</p>
@@ -221,13 +264,22 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                 <div className="p-3 bg-gray-900 border border-gray-800 rounded space-y-2">
                   <div className="flex items-center justify-between">
                     <span className={`text-sm font-black uppercase tracking-widest ${verdictColor}`}>
-                      {creResult.verdict}
+                      {creResult.mode === 'accepted' || !creResult.verdict
+                        ? 'ACCEPTED'
+                        : creResult.verdict}
                     </span>
                     <span className="text-[9px] font-mono text-gray-500 uppercase">{creResult.mode}</span>
                   </div>
+                  {creResult.mode === 'accepted' && (
+                    <p className="text-[10px] text-yellow-400/90 border border-yellow-500/20 bg-yellow-500/5 rounded p-2">
+                      Workflow accepted — not gateable for deploy until a real verdict exists. Use Stub mode for a
+                      local policy result.
+                    </p>
+                  )}
                   <p className="text-[10px] text-gray-400">{creResult.reason}</p>
                   <p className="text-[9px] font-mono text-gray-600 break-all">
                     hash {creResult.sourceHash.slice(0, 16)}… · mask 0x{creResult.riskMask.toString(16)}
+                    {creResult.gateable ? '' : ' · not gateable'}
                   </p>
                   {creResult.executionId && (
                     <p className="text-[9px] text-gray-500">
@@ -251,12 +303,39 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                       consumer {getCreConsumerAddress()}
                     </p>
                   )}
+                  {creResult.gateable && creResult.verdict && getCreConsumerAddress() && (
+                    <div className="pt-1 space-y-1.5">
+                      <button
+                        type="button"
+                        onClick={recordOnchain}
+                        disabled={recordBusy}
+                        className="w-full py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-60 text-gray-200 rounded text-[9px] font-black uppercase tracking-widest"
+                      >
+                        {recordBusy ? 'Recording…' : 'Record verdict on Sepolia'}
+                      </button>
+                      <p className="text-[8px] text-gray-600 leading-relaxed">
+                        Staging only: calls consumer.recordVerdict (owner/authorizedReporter). Keystone DON write is
+                        the production target.
+                      </p>
+                      {recordTx && (
+                        <p className="text-[9px] text-green-400 font-mono break-all">tx {recordTx}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+          ) : !reportReady ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center p-4">
+              <Zap className="h-8 w-8 mb-2 opacity-20" />
+              <p className="text-[10px] uppercase tracking-widest font-bold">Waiting for Meaningful Code</p>
+              <p className="text-[9px] mt-1 opacity-50">
+                Write more logic for the automated report — Confidential audit is still available.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2 pb-4">
-              {report.findings.length === 0 ? (
+              {!report || report.findings.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center opacity-40 p-4">
                   <CheckCircle2 className="h-8 w-8 text-green-500 mb-2" />
                   <p className="text-[10px] font-bold uppercase tracking-widest">No issues found</p>
@@ -291,9 +370,9 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
               )}
             </div>
           )}
-          {internalTab === 'automated' && (
+          {internalTab === 'automated' && reportReady && (
             <p className="text-[9px] text-gray-600 px-3 pb-3 border-t border-gray-800/50 pt-2">
-              Static heuristics only — Confidential CRE audit is the live deploy gate.
+              Static heuristics only — staging CRE audit (Problem Audit → Confidential) is the live deploy gate.
             </p>
           )}
         </div>

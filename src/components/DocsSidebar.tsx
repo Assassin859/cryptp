@@ -61,7 +61,7 @@ const DocsSidebar: React.FC = () => {
                            Docs <ExternalLink className="size-2.5" />
                         </a>
                      </div>
-                     <p className="text-[9px] text-[#858585]">Confidential pre-deploy audit gate. Run Problem Audit → Confidential. Operator setup: docs/CHAINLINK.md. Trigger proxy: npm run compiler → POST /cre/audit.</p>
+                     <p className="text-[9px] text-[#858585]">Staging pre-deploy audit gate (local proxy policy today; TEE when CRE registered). Run Problem Audit → Confidential. docs/CHAINLINK.md · npm run compiler → POST /cre/audit.</p>
                   </div>
 
                   <div className="pt-3">

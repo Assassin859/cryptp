@@ -72,7 +72,7 @@ const AIChat = React.lazy(() => import('./AIChat'));
 const AnalyticsSidebar = React.lazy(() => import('./AnalyticsSidebar'));
 import { User } from '@supabase/supabase-js';
 import { SecurityReport, scanContract } from '../utils/securityScanner';
-import { creAllowsLiveDeploy } from '../utils/creClient';
+import { creAllowsLiveDeploy, clearCreVerdictCache } from '../utils/creClient';
 import { isCreGateEnabled } from '../utils/creConstants';
 import { 
   ContractFile,
@@ -135,7 +135,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   // ─── Modal State (replaces window.confirm / window.prompt) ───────────────
   const [confirmModal, setConfirmModal] = useState<{
     title: string; message: string; confirmLabel?: string;
-    isDangerous?: boolean; onConfirm: () => void;
+    isDangerous?: boolean; onConfirm: () => void; onCancel?: () => void;
   } | null>(null);
   const [inputModal, setInputModal] = useState<{
     title: string; label: string; placeholder?: string;
@@ -157,6 +157,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       hasCompiledInSession: boolean;
       activeCompileDeployment: SimulatedDeployment | null;
       lastCompiledSource: string | null;
+      lastCompiledHash: string | null;
   }>>({});
   const switchingFileRef = useRef(false);
   const bootstrapInFlight = useRef(false);
@@ -326,6 +327,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
               setHasCompiledInSession(true);
               const activeFile = mostRecent.files?.find(f => f.id === mostRecent.active_file_id) || mostRecent.files?.[0];
               const contentHash = await computeContentHash(activeCode);
+              lastCompiledSourceRef.current = activeCode;
+              lastCompiledHashRef.current = contentHash;
               const report = scanContract(activeCode);
               setSecurityReport(report);
               const savedCompilation = await saveCompilation(userId, mostRecent.id, result, {
@@ -347,6 +350,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                 blockNumber: await browserVM.getBlockNumber(),
                 isRealChain: false,
                 abi: result.abi as SimulatedDeployment['abi'],
+                bytecode: result.bytecode,
+                sourceSnapshot: activeCode,
               };
 
               await saveDeployment(userId, mostRecent.id, {
@@ -596,12 +601,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             setHasCompiledInSession(cached.hasCompiledInSession);
             setActiveCompileDeployment(cached.activeCompileDeployment || null);
             lastCompiledSourceRef.current = cached.lastCompiledSource ?? null;
+            lastCompiledHashRef.current = cached.lastCompiledHash ?? null;
         } else {
             setCompileResult(null);
             setSecurityReport(null);
             setHasCompiledInSession(false);
             setActiveCompileDeployment(null);
             lastCompiledSourceRef.current = null;
+            lastCompiledHashRef.current = null;
         }
         return;
     }
@@ -614,6 +621,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       setHasCompiledInSession(false);
       setActiveCompileDeployment(null);
       setActiveDeployment(null);
+      lastCompiledHashRef.current = null;
+      lastCompiledSourceRef.current = null;
     }
     
     const timeoutId = setTimeout(saveCode, 1000);
@@ -639,6 +648,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     setCompileResult(result);
     setActiveCompileDeployment(null);
     if (result && result.success && currentProject) {
+       clearCreVerdictCache();
        setHasCompiledInSession(true);
        lastCompiledSourceRef.current = code;
        const report = scanContract(code);
@@ -670,6 +680,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     } else {
        setHasCompiledInSession(false);
        lastCompiledSourceRef.current = null;
+       lastCompiledHashRef.current = null;
        setSecurityReport(null);
     }
   };
@@ -755,6 +766,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
          blockNumber: await browserVM.getBlockNumber(),
          isRealChain: false,
          abi: compileResult.abi as SimulatedDeployment['abi'],
+         bytecode: compileResult.bytecode,
+         sourceSnapshot: lastCompiledSourceRef.current ?? code,
        };
        
        addSimulation(newSim, {
@@ -803,23 +816,26 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     entry: SimulatedDeployment,
     extra: Partial<SaveDeploymentPayload> = {}
   ) => {
-    const withAbi: SimulatedDeployment = {
+    const withMeta: SimulatedDeployment = {
       ...entry,
       abi: entry.abi || (compileResult?.abi as SimulatedDeployment['abi']) || [],
+      bytecode: entry.bytecode || extra.bytecode || compileResult?.bytecode || undefined,
+      sourceSnapshot:
+        entry.sourceSnapshot ?? lastCompiledSourceRef.current ?? undefined,
     };
-    setSimulations(prev => [withAbi, ...prev]);
-    persistDeployment(withAbi, extra).catch(console.error);
+    setSimulations(prev => [withMeta, ...prev]);
+    persistDeployment(withMeta, extra).catch(console.error);
     setActiveDeployment({
-      address: withAbi.contractAddress,
-      abi: withAbi.abi || [],
-      network: withAbi.network,
-      sourceSnapshot: lastCompiledSourceRef.current ?? undefined,
+      address: withMeta.contractAddress,
+      abi: withMeta.abi || [],
+      network: withMeta.network,
+      sourceSnapshot: withMeta.sourceSnapshot,
     });
 
     const isSepoliaLive =
-      withAbi.isRealChain === true && /sepolia/i.test(withAbi.network || '');
+      withMeta.isRealChain === true && /sepolia/i.test(withMeta.network || '');
     const canOfferGraph =
-      isSepoliaLive && abiLooksLikeSimpleStorage(withAbi.abi);
+      isSepoliaLive && abiLooksLikeSimpleStorage(withMeta.abi);
 
     if (canOfferGraph) {
       setConfirmModal({
@@ -929,6 +945,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
            hasCompiledInSession,
            activeCompileDeployment,
            lastCompiledSource: lastCompiledSourceRef.current,
+           lastCompiledHash: lastCompiledHashRef.current,
        };
      }
      
@@ -1395,7 +1412,19 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     }
   };
 
-  const handlePromoteContract = () => {
+  const askConfirmManualReview = (message: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      setConfirmModal({
+        title: 'CRE MANUAL_REVIEW',
+        message: `${message}\n\nProceed with MetaMask deploy anyway?`,
+        confirmLabel: 'Deploy anyway',
+        isDangerous: true,
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
+
+  const handlePromoteContract = (deployment?: SimulatedDeployment) => {
     if (!isConnected || !signer) {
       setConfirmModal({
         title: 'Wallet Not Connected',
@@ -1406,13 +1435,78 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       });
       return;
     }
-    if (!compileResult || !compileResult.bytecode) {
+
+    const selectedBytecode = deployment?.bytecode;
+    const selectedAbi = deployment?.abi;
+    const selectedSource = deployment?.sourceSnapshot;
+
+    // Prefer selected sandbox deployment when it carries bytecode; else current compile.
+    const useSelected = Boolean(deployment && selectedBytecode && selectedAbi);
+    if (deployment && !useSelected) {
+      setConfirmModal({
+        title: 'Cannot promote selection',
+        message:
+          'This sandbox deployment has no stored bytecode. Re-deploy from Output after a fresh compile, then promote that node.',
+        confirmLabel: 'OK',
+        isDangerous: false,
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    const promoteAbi = useSelected ? selectedAbi! : compileResult?.abi;
+    const promoteBytecode = useSelected ? selectedBytecode! : compileResult?.bytecode;
+    const promoteSource = useSelected
+      ? selectedSource ?? lastCompiledSourceRef.current
+      : lastCompiledSourceRef.current;
+
+    if (!promoteBytecode || !promoteAbi) {
       setConfirmModal({
         title: 'Not Compiled',
         message: 'Please compile your contract successfully before promoting to a live network.',
         confirmLabel: 'OK',
         isDangerous: false,
         onConfirm: () => {}
+      });
+      return;
+    }
+
+    // Freshness: selected snapshot must match current editor when promoting selection;
+    // otherwise same bar as Output MetaMask (session compile + source + hash).
+    if (useSelected) {
+      if (!promoteSource || promoteSource !== code) {
+        setConfirmModal({
+          title: 'Recompile required',
+          message:
+            'Editor source no longer matches the selected sandbox deployment. Restore that source or recompile/redeploy, then promote.',
+          confirmLabel: 'OK',
+          isDangerous: false,
+          onConfirm: () => {},
+        });
+        return;
+      }
+      if (!lastCompiledHashRef.current || lastCompiledSourceRef.current !== code) {
+        setConfirmModal({
+          title: 'Recompile required',
+          message: 'Session compile is stale. Recompile before promoting to a live network.',
+          confirmLabel: 'OK',
+          isDangerous: false,
+          onConfirm: () => {},
+        });
+        return;
+      }
+    } else if (
+      !hasCompiledInSession ||
+      lastCompiledSourceRef.current !== code ||
+      !lastCompiledHashRef.current
+    ) {
+      setConfirmModal({
+        title: 'Recompile required',
+        message:
+          'Source changed since last compile (or no session compile hash). Recompile before promoting to a live network.',
+        confirmLabel: 'OK',
+        isDangerous: false,
+        onConfirm: () => {},
       });
       return;
     }
@@ -1429,7 +1523,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       isDangerous: false,
       onConfirm: async () => {
         try {
-          if (abiHasConstructorArgs(compileResult!.abi as unknown[] | undefined)) {
+          if (abiHasConstructorArgs(promoteAbi as unknown[] | undefined)) {
             setConfirmModal({
               title: 'Constructor Arguments Required',
               message:
@@ -1440,12 +1534,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             });
             return;
           }
-          const processedArgs = compileResult!.abi
-            ? parseConstructorArgsFromAbi(compileResult!.abi, {})
+          const processedArgs = promoteAbi
+            ? parseConstructorArgsFromAbi(promoteAbi, {})
             : [];
           const factory = new ethers.ContractFactory(
-            compileResult!.abi as any,
-            compileResult!.bytecode!,
+            promoteAbi as any,
+            promoteBytecode,
             signer
           );
           const deployTx = await factory.deploy(...processedArgs);
@@ -1461,11 +1555,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             timestamp: new Date().toISOString(),
             blockNumber: receipt?.blockNumber || 0,
             isRealChain: true,
-            abi: compileResult!.abi as SimulatedDeployment['abi'],
+            abi: promoteAbi as SimulatedDeployment['abi'],
+            bytecode: promoteBytecode,
+            sourceSnapshot: promoteSource ?? undefined,
           };
           addSimulation(promotedEntry, {
             deployment_kind: 'promoted',
             constructor_args: processedArgs,
+            bytecode: promoteBytecode,
           });
         } catch (e: any) {
           console.error('Promotion to MetaMask Failed:', e);
@@ -1501,7 +1598,6 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           confirmLabel: 'Promote anyway',
           isDangerous: true,
           onConfirm: () => {
-            // Defer so ConfirmModal's setConfirmModal(null) does not clear the next dialog.
             window.setTimeout(
               () => runPromoteConfirm('\n• CRE verdict: MANUAL_REVIEW (confirmed).\n'),
               0
@@ -1703,7 +1799,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                     onPreview={handlePreviewContract}
                   />
                 )}
-                {activeActivity === 'chain' && <SimulatedChain deployments={simulations} onReset={() => setShowResetConfirm(true)} onPromote={handlePromoteContract} onInteract={(d) => { setActiveDeployment({ address: d.contractAddress, abi: d.abi || [], network: d.network, sourceSnapshot: lastCompiledSourceRef.current ?? undefined }); setActiveActivity('interact'); }} />}
+                {activeActivity === 'chain' && <SimulatedChain deployments={simulations} onReset={() => setShowResetConfirm(true)} onPromote={handlePromoteContract} onInteract={(d) => { setActiveDeployment({ address: d.contractAddress, abi: d.abi || [], network: d.network, sourceSnapshot: d.sourceSnapshot ?? lastCompiledSourceRef.current ?? undefined }); setActiveActivity('interact'); }} />}
                 {activeActivity === 'interact' && activeDeployment ? (
                   <ContractInteraction 
                     abi={activeDeployment.abi} 
@@ -1852,6 +1948,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                             setShowBottomPanel(true);
                             setActiveBottomTab('security');
                           }}
+                          onConfirmManualReview={askConfirmManualReview}
                         />
                       </div>
                     )}
@@ -1999,7 +2096,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           confirmLabel={confirmModal.confirmLabel}
           isDangerous={confirmModal.isDangerous}
           onConfirm={() => { confirmModal.onConfirm(); setConfirmModal(null); }}
-          onCancel={() => setConfirmModal(null)}
+          onCancel={() => { confirmModal.onCancel?.(); setConfirmModal(null); }}
         />
       )}
 

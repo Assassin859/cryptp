@@ -11,5 +11,9 @@ export interface SimulatedDeployment {
   status: 'pending' | 'confirmed' | 'failed';
   isRealChain: boolean;
   abi?: import('ethers').InterfaceAbi;
+  /** Sandbox deploy bytecode for Promote of the selected node */
+  bytecode?: string;
+  /** Source that produced this deployment (Promote / CRE freshness) */
+  sourceSnapshot?: string;
 }
 

@@ -19,7 +19,9 @@ import {
   setCreUserPrefs,
   getPlatformCreTriggerUrl,
   getPlatformCreConsumerAddress,
+  CRE_KEYS_STORAGE,
   type CreGateMode,
+  type CreUserPrefs,
 } from '../utils/creConstants';
 
 interface SettingsSidebarProps {
@@ -80,7 +82,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
       try {
         const { data } = await supabase
           .from('user_settings')
-          .select('graph_prefs')
+          .select('graph_prefs, cre_prefs')
           .eq('user_id', user.id)
           .maybeSingle();
         const gp = data?.graph_prefs as Partial<GraphUserPrefs> | null;
@@ -97,6 +99,22 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
           setGraphMode(getGraphSourceMode());
           setGraphEndpoint(getCustomGraphEndpoint());
           setGraphRegistry(getCustomGraphRegistryAddress());
+        }
+
+        const cp = data?.cre_prefs as Partial<CreUserPrefs> | null;
+        if (cp && typeof cp === 'object') {
+          const appliedCre = setCreUserPrefs({
+            gateEnabled: cp.gateEnabled !== false,
+            mode: cp.mode === 'live' ? 'live' : 'stub',
+            triggerUrl: typeof cp.triggerUrl === 'string' ? cp.triggerUrl : '',
+            workflowId: typeof cp.workflowId === 'string' ? cp.workflowId : '',
+            consumerAddress: typeof cp.consumerAddress === 'string' ? cp.consumerAddress : '',
+          });
+          setCreGateEnabled(appliedCre.gateEnabled);
+          setCreMode(appliedCre.mode);
+          setCreTriggerUrl(appliedCre.triggerUrl);
+          setCreWorkflowId(appliedCre.workflowId);
+          setCreConsumer(appliedCre.consumerAddress);
         }
       } catch {
         setGraphMode(getGraphSourceMode());
@@ -138,6 +156,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
         ai_keys: aiKeys,
         rpc_keys: rpcKeys,
         graph_prefs: prefs,
+        cre_prefs: getCreUserPrefs(),
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
@@ -145,6 +164,35 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
       console.error('Graph prefs cloud sync failed:', e);
       alert(
         'Saved on this device, but cloud sync failed. Run supabase-migration-graph-prefs.sql if graph_prefs column is missing.'
+      );
+    }
+  };
+
+  const saveCrePrefs = async () => {
+    const prefs = setCreUserPrefs({
+      gateEnabled: creGateEnabled,
+      mode: creMode,
+      triggerUrl: creTriggerUrl,
+      workflowId: creWorkflowId,
+      consumerAddress: creConsumer,
+    });
+    setCreSavedFlash(true);
+    window.setTimeout(() => setCreSavedFlash(false), 2000);
+    if (!user) return;
+    try {
+      const { error } = await supabase.from('user_settings').upsert({
+        user_id: user.id,
+        ai_keys: aiKeys,
+        rpc_keys: rpcKeys,
+        graph_prefs: getGraphUserPrefs(),
+        cre_prefs: prefs,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    } catch (e: unknown) {
+      console.error('CRE prefs cloud sync failed:', e);
+      alert(
+        'Saved on this device, but cloud sync failed. Run supabase-migration-cre-prefs.sql if cre_prefs column is missing.'
       );
     }
   };
@@ -167,6 +215,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
          rpc_keys: rpcKeys,
          ai_keys: aiKeys,
          graph_prefs: graphPrefs,
+         cre_prefs: getCreUserPrefs(),
          updated_at: new Date().toISOString()
        });
        
@@ -197,6 +246,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
              ai_keys: {},
              rpc_keys: {},
              graph_prefs: getGraphUserPrefs(),
+             cre_prefs: getCreUserPrefs(),
              updated_at: new Date().toISOString(),
            });
          } catch { /* cloud row may not exist */ }
@@ -243,6 +293,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
           localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
           localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
           localStorage.removeItem('cryptp-graph-keys');
+          localStorage.removeItem(CRE_KEYS_STORAGE);
           onSignOut();
         } catch(e: any) {
           console.error("Failed to erase data:", e);
@@ -563,10 +614,16 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
              <Lock className="size-3" /> Chainlink CRE
            </h3>
            <p className="text-[9px] text-gray-500 mb-3 pl-1 leading-relaxed">
-             Confidential audit gate before MetaMask deploy. Stub mode uses the local proxy policy;
-             live mode JWT-triggers your deployed CRE workflow when configured.
+             Staging audit gate before MetaMask deploy. Stub mode runs local proprietary policy via the
+             proxy (not TEE). Live mode JWT-triggers a registered CRE workflow; accepted is not gateable
+             until a real verdict exists. TEE/handlerInTee is the target after register.
+             The live-deploy gate is client-side (Settings toggle) — advisory, not an enclave firewall.
+             Saved to this device and synced to your account (`user_settings.cre_prefs`).
              {!getPlatformCreTriggerUrl() && (
-               <span className="block mt-1 text-amber-500/80">Default trigger: localhost:3001/cre/audit</span>
+               <span className="block mt-1 text-amber-500/80">
+                 Local dev falls back to localhost:3001/cre/audit. Production builds need VITE_CRE_TRIGGER_URL
+                 or a Trigger URL below.
+               </span>
              )}
            </p>
            <div className="bg-[#121214] border border-gray-800 rounded-lg p-3 space-y-3">
@@ -607,7 +664,9 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
                   type="url"
                   value={creTriggerUrl}
                   onChange={(e) => setCreTriggerUrl(e.target.value)}
-                  placeholder={getPlatformCreTriggerUrl() || 'http://localhost:3001/cre/audit'}
+                  placeholder={
+                    getPlatformCreTriggerUrl() || 'Dev: http://localhost:3001/cre/audit (set for prod)'
+                  }
                   className="w-full bg-[#1e1e1e] border border-[#333] rounded p-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
@@ -637,17 +696,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setCreUserPrefs({
-                    gateEnabled: creGateEnabled,
-                    mode: creMode,
-                    triggerUrl: creTriggerUrl,
-                    workflowId: creWorkflowId,
-                    consumerAddress: creConsumer,
-                  });
-                  setCreSavedFlash(true);
-                  window.setTimeout(() => setCreSavedFlash(false), 2000);
-                }}
+                onClick={() => void saveCrePrefs()}
                 className="w-full px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 rounded text-[10px] font-black uppercase tracking-widest transition-colors"
               >
                 {creSavedFlash ? 'Saved' : 'Save CRE settings'}

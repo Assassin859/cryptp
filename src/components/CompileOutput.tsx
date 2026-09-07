@@ -32,6 +32,8 @@ interface CompileOutputProps {
   onDeployment?: (entry: SimulatedDeployment, extra?: Partial<SaveDeploymentPayload>) => void;
   deploymentResult?: SimulatedDeployment | null;
   onOpenConfidentialAudit?: () => void;
+  /** IDE ConfirmModal for CRE MANUAL_REVIEW (replaces window.confirm). */
+  onConfirmManualReview?: (message: string) => Promise<boolean>;
 }
 
 const CompileOutput: React.FC<CompileOutputProps> = ({
@@ -41,6 +43,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
   deploymentResult,
   canDeploy = true,
   onOpenConfidentialAudit,
+  onConfirmManualReview,
 }) => {
   const { account, networkName, isConnected, connect } = useWeb3();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview', 'constructor']));
@@ -108,9 +111,9 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
         return;
       }
       if (gate.needsConfirm) {
-        const proceed = window.confirm(
-          `${gate.message}\n\nProceed with MetaMask deploy anyway?`
-        );
+        const proceed = onConfirmManualReview
+          ? await onConfirmManualReview(gate.message)
+          : false;
         if (!proceed) {
           onOpenConfidentialAudit?.();
           return;
@@ -186,6 +189,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
         status: 'confirmed',
         isRealChain: false,
         abi: result.abi as SimulatedDeployment['abi'],
+        bytecode: result.bytecode,
       };
 
       onDeployment?.(simulated, {

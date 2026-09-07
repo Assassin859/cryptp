@@ -230,7 +230,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
             <h2 className="text-xl font-semibold">Step 6: Confidential audit &amp; Promote</h2>
           </div>
           <ol className="text-gray-300 space-y-3 list-decimal list-inside">
-            <li className="pl-2">Open <strong>Problem Audit → Confidential</strong> and run the Chainlink CRE audit (TEE policy). Live deploy is gated on <strong>ALLOW</strong></li>
+            <li className="pl-2">Open <strong>Problem Audit → Confidential</strong> and run the staging CRE audit (local proxy policy today; TEE target when registered). Live deploy is gated on a gateable <strong>ALLOW</strong> when the client-side Settings gate is on</li>
             <li className="pl-2">Click the <strong>Wallet</strong> button in the header to connect MetaMask</li>
             <li className="pl-2">In the <strong>History</strong> tab, click <strong>Promote to Live Network</strong> (or Output → Injected Provider)</li>
             <li className="pl-2">CryptP uses your MetaMask signer to broadcast the transaction — supports Sepolia, Base, and Ethereum Mainnet</li>
