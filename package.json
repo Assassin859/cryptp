@@ -17,6 +17,8 @@
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "deploy:registry": "hardhat run scripts/deploy-registry.ts --network sepolia",
     "deploy:audit-consumer": "hardhat run scripts/deploy-audit-consumer.ts --network sepolia",
+    "deploy:eth-usd-consumer": "hardhat run scripts/deploy-eth-usd-consumer.ts --network sepolia",
+    "deploy:counter-hook": "hardhat run scripts/deploy-counter-hook.ts --network sepolia",
     "node": "hardhat node",
     "clean": "hardhat clean",
     "compiler": "node compilerBackend.mjs",

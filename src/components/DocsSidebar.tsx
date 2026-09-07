@@ -66,6 +66,16 @@ const DocsSidebar: React.FC = () => {
 
                   <div className="pt-3">
                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-bold text-gray-300">Uniswap v4 hooks</span>
+                        <a href="https://docs.uniswap.org/contracts/v4/overview" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 transition-colors uppercase font-bold">
+                           Docs <ExternalLink className="size-2.5" />
+                        </a>
+                     </div>
+                     <p className="text-[9px] text-[#858585]">Token Factory → Uniswap Continuity → v4 CounterHook, or New File template. Compile ≥0.8.24, sandboxBumpAfterSwap in Interact. docs/UNISWAP.md · FEEDBACK.md for UF prize form.</p>
+                  </div>
+
+                  <div className="pt-3">
+                     <div className="flex items-center justify-between mb-1">
                         <span className="text-[11px] font-bold text-gray-300">Alchemy RPC</span>
                         <a href="https://dashboard.alchemy.com/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 transition-colors uppercase font-bold">
                            Get Key <ExternalLink className="size-2.5" />

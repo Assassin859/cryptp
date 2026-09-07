@@ -7,7 +7,9 @@ import {
   Info, 
   ChevronRight,
   Cpu,
-  Activity
+  Activity,
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import { 
   ResponsiveContainer,
@@ -18,9 +20,13 @@ import { isAbiFunction, asAbiArray } from '../types/abi';
 import { CompilationResult } from '../utils/hardhatCompiler';
 import { SecurityReport } from '../utils/securityScanner';
 import { analyzeStorageLayout } from '../utils/StorageAnalyzer';
-import { priceService } from '../utils/PriceService';
+import { priceService, type PriceData, type PriceSource } from '../utils/PriceService';
 import { COMPILER_VERSIONS } from '../utils/compilerVersions';
 import { COMPLEX_FUNCTIONS, COMPLEX_FUNCTION_OVERHEAD } from '../constants/gas';
+import { useWeb3 } from '../context/Web3Context';
+import { getEthUsdConsumerAddress, SEPOLIA_CHAIN_ID } from '../utils/ethUsdConstants';
+import { settleEthUsdOnchain } from '../utils/ethUsdConsumer';
+import { getErrorMessage } from '../utils/errorMessage';
 
 interface MeasurementGateProps {
   children: React.ReactNode;
@@ -87,18 +93,62 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
   onVersionChange,
   isCompiled = false
 }) => {
-  const [marketData, setMarketData] = useState<{ eth_usd: number; gas_price_gwei: number } | null>(null);
+  const { signer, isConnected, chainId, connect, switchNetwork } = useWeb3();
+  const [marketData, setMarketData] = useState<PriceData | null>(null);
+  const [settleBusy, setSettleBusy] = useState(false);
+  const [settleTx, setSettleTx] = useState<string | null>(null);
+  const [settleError, setSettleError] = useState<string | null>(null);
+  const consumerAddress = getEthUsdConsumerAddress();
+
+  const refreshMarket = async () => {
+    const data = await priceService.getLatestData();
+    setMarketData(data);
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const data = await priceService.getLatestData();
-      setMarketData(data);
-    };
-    fetchData();
-    const interval = setInterval(fetchData, 60000);
+    refreshMarket();
+    const interval = setInterval(refreshMarket, 60000);
     return () => clearInterval(interval);
   }, []);
 
+  const settleEthUsd = async () => {
+    if (!consumerAddress) {
+      setSettleError('Set VITE_ETH_USD_CONSUMER_ADDRESS (deploy: npm run deploy:eth-usd-consumer).');
+      return;
+    }
+    setSettleError(null);
+    setSettleTx(null);
+    if (!isConnected || !signer) {
+      setSettleError('Connect MetaMask to settle ETH/USD on Sepolia.');
+      await connect();
+      return;
+    }
+    if (chainId !== SEPOLIA_CHAIN_ID) {
+      try {
+        await switchNetwork(SEPOLIA_CHAIN_ID);
+      } catch (e) {
+        setSettleError(getErrorMessage(e) || 'Switch MetaMask to Sepolia to settle.');
+        return;
+      }
+    }
+    setSettleBusy(true);
+    try {
+      const { txHash } = await settleEthUsdOnchain({ signer, consumerAddress });
+      setSettleTx(txHash);
+      priceService.invalidateCache();
+      await refreshMarket();
+    } catch (e) {
+      setSettleError(getErrorMessage(e) || 'settleLatestPrice failed');
+    } finally {
+      setSettleBusy(false);
+    }
+  };
+
+  const priceSourceLabel = (source?: PriceSource) => {
+    if (source === 'chainlink') return 'ETH/USD · Chainlink';
+    if (source === 'coingecko') return 'ETH/USD · CoinGecko (fallback)';
+    return 'ETH/USD · failsafe';
+  };
   const radarData = useMemo(() => {
     let access = 100, reentrancy = 100, logic = 100, arithmetic = 100, gas = 100;
     
@@ -322,9 +372,14 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
 
             {/* Cost Projection */}
             <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-200">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-tighter text-gray-400">
-                <DollarSign className="size-3 text-green-500" />
-                Market Cost Projection
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-tighter text-gray-400">
+                  <DollarSign className="size-3 text-green-500" />
+                  Market Cost Projection
+                </div>
+                <span className="text-[8px] font-mono text-gray-500 truncate" title={priceSourceLabel(marketData?.source)}>
+                  {priceSourceLabel(marketData?.source)} · ${currentEthPrice.toFixed(2)}
+                </span>
               </div>
               <div className="space-y-2">
                 <div className="bg-[#1e1e1e] p-3 rounded border border-[#333] group hover:border-[#007acc] transition-colors shadow-lg">
@@ -355,6 +410,54 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
                     </span>
                     <ChevronRight className="size-3 group-hover:translate-x-1 transition-transform" />
                   </div>
+                </div>
+
+                <div className="bg-[#1e1e1e] p-3 rounded border border-[#333] space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Chainlink settle</span>
+                    {consumerAddress ? (
+                      <a
+                        href={`https://sepolia.etherscan.io/address/${consumerAddress}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[8px] text-blue-400 hover:underline inline-flex items-center gap-0.5 font-mono"
+                      >
+                        Consumer <ExternalLink className="size-2.5" />
+                      </a>
+                    ) : (
+                      <span className="text-[8px] text-amber-500/80">No consumer env</span>
+                    )}
+                  </div>
+                  <p className="text-[8px] text-gray-500 leading-relaxed">
+                    Writes latest ETH/USD from the Sepolia Aggregator into onchain storage (Continuity state change).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void settleEthUsd()}
+                    disabled={settleBusy || !consumerAddress}
+                    className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider bg-green-600/20 text-green-400 border border-green-500/30 hover:bg-green-600/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {settleBusy ? (
+                      <>
+                        <Loader2 className="size-3 animate-spin" /> Settling…
+                      </>
+                    ) : (
+                      'Settle ETH/USD on Sepolia'
+                    )}
+                  </button>
+                  {settleTx && (
+                    <a
+                      href={`https://sepolia.etherscan.io/tx/${settleTx}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[8px] text-green-400 hover:underline inline-flex items-center gap-0.5 font-mono break-all"
+                    >
+                      Tx {settleTx.slice(0, 10)}… <ExternalLink className="size-2.5 shrink-0" />
+                    </a>
+                  )}
+                  {settleError && (
+                    <p className="text-[8px] text-red-400/90 leading-relaxed">{settleError}</p>
+                  )}
                 </div>
               </div>
             </section>

@@ -35,6 +35,8 @@ graph TD
 - **Studio-Ready UX**: Integrated AI assistant, security auditor, and one-click token factories.
 - **The Graph (Indexed)**: Query on-chain `ValueChanged` history in-IDE via a platform Sepolia subgraph, or paste your own Graph Studio endpoint (Settings / Indexed). See [docs/THE_GRAPH.md](docs/THE_GRAPH.md).
 - **Chainlink CRE (staging gate)**: Pre–MetaMask-deploy audit via local proprietary policy on the proxy; TEE/`handlerInTee` is the target once a CRE workflow is registered. See [docs/CHAINLINK.md](docs/CHAINLINK.md).
+- **Chainlink Price Feeds**: Analytics Market Cost uses Sepolia ETH/USD; settle onchain via `EthUsdConsumer`. See [docs/CHAINLINK.md](docs/CHAINLINK.md).
+- **Uniswap v4 hooks**: Educational CounterHook template (compile → sandbox → Sepolia). See [docs/UNISWAP.md](docs/UNISWAP.md) and [FEEDBACK.md](FEEDBACK.md).
 
 ---
 
@@ -44,11 +46,12 @@ graph TD
 | :--- | :--- | :--- |
 | **`src/utils/`** | The "Engine Room" of the IDE. | `browserVM.ts` (The local chain) |
 | **`src/components/`** | Modular UI components for the IDE layout. | `SolidityEditor.tsx` (Monaco wrapper) |
-| **`contracts/`** | Smart contract templates and local storage. | `Counter.sol` (Example template) |
-| **`scripts/`** | Deployment logic for real-world networks. | `deploy.ts` (Hardhat script) |
+| **`contracts/`** | Smart contract templates and Continuity consumers. | `hooks/CounterHook.sol` (Uniswap v4) |
+| **`scripts/`** | Deployment logic for real-world networks. | `deploy-counter-hook.ts` |
 | **`ignition/`** | Hardhat Ignition deployment modules. | `Counter.ts` |
 | **`cre/`** | Chainlink CRE Confidential audit workflow | `aethon-audit-firewall/` |
-| **`docs/`** | Deep-dive documentation for users. | `INSTALLATION.md` |
+| **`docs/`** | Deep-dive documentation for users. | `UNISWAP.md`, `CHAINLINK.md` |
+| **`FEEDBACK.md`** | Uniswap Foundation hackathon feedback | required for UF prize form |
 
 ---
 

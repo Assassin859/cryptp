@@ -8,7 +8,8 @@ import {
   ShieldCheck, 
   Award,
   ChevronRight,
-  FileText
+  FileText,
+  Layers
 } from 'lucide-react';
 import { allTemplates } from '../utils/contractTemplates';
 
@@ -41,6 +42,7 @@ const AddFileModal: React.FC<AddFileModalProps> = ({ onClose, onConfirm, folderP
   const getTemplateIcon = (id: string) => {
     switch (id) {
       case 'empty': return <FileText className="size-4 text-gray-500" />;
+      case 'uniswap-v4-counter-hook': return <Layers className="size-4 text-pink-400" />;
       case 'erc20': return <Coins className="size-4 text-yellow-400" />;
       case 'burnable': return <Zap className="size-4 text-blue-400" />;
       case 'erc721': return <Award className="size-4 text-purple-400" />;
@@ -111,7 +113,13 @@ const AddFileModal: React.FC<AddFileModalProps> = ({ onClose, onConfirm, folderP
                        <div>
                           <p className="text-[10px] font-bold tracking-tight">{template.name}</p>
                           <p className="text-[8px] text-gray-600 uppercase font-black">
-                            {template.id === 'empty' ? 'Minimal' : (template.id === 'erc721' ? 'NFT' : 'Standard')}
+                            {template.id === 'empty'
+                              ? 'Minimal'
+                              : template.id === 'uniswap-v4-counter-hook'
+                                ? 'Uniswap v4'
+                                : template.id === 'erc721'
+                                  ? 'NFT'
+                                  : 'Standard'}
                           </p>
                        </div>
                     </div>

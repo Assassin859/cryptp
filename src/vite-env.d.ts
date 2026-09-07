@@ -25,6 +25,8 @@ interface ImportMetaEnv {
   readonly VITE_CRE_WORKFLOW_ID?: string;
   readonly VITE_CRE_CONSUMER_ADDRESS?: string;
   readonly VITE_CRE_AUDIT_TOKEN?: string;
+  readonly VITE_ETH_USD_CONSUMER_ADDRESS?: string;
+  readonly VITE_UNISWAP_COUNTER_HOOK?: string;
 }
 
 interface ImportMeta {

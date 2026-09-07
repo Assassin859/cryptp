@@ -4,12 +4,18 @@
   "private": true,
   "type": "module",
   "description": "Aethon CRE Confidential Workflow: pre-deploy AI audit gate (handlerInTee)",
+  "main": "dist/main.js",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-vm-modules --test src/policy.test.ts",
-    "simulate:hint": "echo Run from cre/: cre workflow simulate ./aethon-audit-firewall --project-root ./ --target=staging-settings --env ./.env"
+    "simulate:hint": "echo Run from cre/: cre workflow simulate ./aethon-audit-firewall --project-root ./ --target=staging-settings --env ./.env --non-interactive --trigger-index 0"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "1.18.0",
+    "viem": "2.34.0",
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "5.9.3"
   }
 }

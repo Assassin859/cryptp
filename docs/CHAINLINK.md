@@ -96,4 +96,14 @@ HTTP trigger: https://docs.chain.link/cre/guides/workflow/using-triggers/http-tr
 
 ## Price Feeds (A)
 
-Out of scope for this doc — Continuity Feeds companion ships after CRE gate.
+Continuity upgrade: Analytics **Market Cost Projection** prefers Chainlink ETH/USD on Sepolia. CoinGecko is fallback only.
+
+| Item | Value |
+|------|--------|
+| Feed (Sepolia ETH/USD) | [`0x694AA1769357215DE4FAC081bf1f309aDC325306`](https://sepolia.etherscan.io/address/0x694AA1769357215DE4FAC081bf1f309aDC325306) |
+| Consumer | [`0x2AC2d2b4ab2Ed6447D888031E6e6d41dBCc4005A`](https://sepolia.etherscan.io/address/0x2AC2d2b4ab2Ed6447D888031E6e6d41dBCc4005A) — [`EthUsdConsumer.sol`](../contracts/EthUsdConsumer.sol) `settleLatestPrice()` |
+| Deploy | `npm run deploy:eth-usd-consumer` |
+| Env | `VITE_ETH_USD_CONSUMER_ADDRESS` (Vite / Railway frontend) |
+| IDE | Analytics → Market Cost → **Settle ETH/USD on Sepolia** |
+
+`PriceService` reads live price via consumer `getLivePrice()` (or the feed proxy if consumer unset). Settling is the Continuity **onchain state change**.

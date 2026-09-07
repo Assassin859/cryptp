@@ -72,8 +72,9 @@ CryptP is a high-performance, browser-native IDE designed to transcend the compl
 *ETHOnline Continuity — Chainlink first, then Uniswap.*
 
 - **Chainlink CRE Confidential Audit Gate**: Pre-live-deploy staging gate via local proprietary policy (`cre-proxy` / `cre/aethon-audit-firewall`); TEE/`handlerInTee` target when CRE registered. IDE Problem Audit → Confidential, MetaMask gate, `AuditFirewallConsumer` on Sepolia. See [docs/CHAINLINK.md](CHAINLINK.md).
-- **Chainlink Price Feeds (next)**: Onchain ETH/USD consumer + Analytics source upgrade.
-- **DeFi Library Manager**: One-click import of Aave, Uniswap, and Chainlink standard interfaces (Uniswap partner next).
+- **Chainlink Price Feeds**: Onchain `EthUsdConsumer` [`0x2AC2d2b4ab2Ed6447D888031E6e6d41dBCc4005A`](https://sepolia.etherscan.io/address/0x2AC2d2b4ab2Ed6447D888031E6e6d41dBCc4005A) + Analytics Market Cost uses Chainlink ETH/USD (CoinGecko fallback). See [docs/CHAINLINK.md](CHAINLINK.md) § Price Feeds (A).
+- **Uniswap v4 hook lab**: Educational `CounterHook` in IDE templates + Sepolia deploy [`0x99d2Cfa4aD9ba4302D263dfEd6E3372EE4940E9e`](https://sepolia.etherscan.io/address/0x99d2Cfa4aD9ba4302D263dfEd6E3372EE4940E9e). See [docs/UNISWAP.md](UNISWAP.md) and [FEEDBACK.md](../FEEDBACK.md).
+- **DeFi Library Manager**: One-click import of Aave / Uniswap interfaces (expand from CounterHook template).
 - **Oracle Simulation**: Feed mock prices into the local EVM to test liquidation logic (after Feeds).
 - **Flash-Loan Simulator**: Test complex multi-hop transactions within the CryptP Sandbox.
 

@@ -19,6 +19,7 @@ import {
   Fingerprint
 } from 'lucide-react';
 import { generateTokenCode, TokenType, AccessControl, TokenOptions } from '../utils/tokenGenerator';
+import { uniswapV4CounterHook } from '../utils/contractTemplates';
 
 interface TokenFactoryProps {
   onInjectCode: (code: string, type: string) => void;
@@ -146,6 +147,19 @@ const TokenFactory: React.FC<TokenFactoryProps> = ({ onInjectCode, onPreview }) 
                     </button>
                   ))}
                </div>
+            </div>
+
+            {/* Uniswap Continuity — inject educational v4 hook */}
+            <div className="space-y-2">
+               <span className="text-[10px] font-black uppercase tracking-widest text-gray-600 block pl-1">Uniswap Continuity</span>
+               <button
+                 type="button"
+                 onClick={() => onInjectCode(uniswapV4CounterHook.code, 'CounterHook')}
+                 className="w-full text-left p-2.5 rounded-lg border border-pink-500/30 bg-pink-500/5 hover:bg-pink-500/10 transition-all"
+               >
+                 <p className="text-[10px] font-bold text-pink-300">v4 CounterHook</p>
+                 <p className="text-[8px] text-gray-500 italic">Inject educational before/afterSwap hook · compile → sandbox → Sepolia</p>
+               </button>
             </div>
 
             {/* Asset Type Selection */}

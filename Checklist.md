@@ -57,8 +57,8 @@ This checklist documents every core feature, interaction, and capability within 
     - **Interaction**: Recharts-based visual polygon mapping risk across 5 categories.
     - **How to Test**: Compile a "Taxable Token". Verify the Radar pulls 'Access' and 'Centralization' risks from the AST scanner and morphs the red radar shape.
 - [x] **Market Cost Projection**
-    - **Interaction**: Live ETH/USD conversions.
-    - **How to Test**: Connects to the CoinGecko API in the background to show exactly how much your contract will cost to deploy on Ethereum Mainnet vs Base L2.
+    - **Interaction**: Live ETH/USD conversions (Chainlink on Sepolia preferred; CoinGecko fallback).
+    - **How to Test**: Open Analytics → Market Cost Projection — source line should say Chainlink when Sepolia RPC is reachable. Optional: connect MetaMask on Sepolia and **Settle ETH/USD on Sepolia** to write `PriceSettled` on the consumer.
 - [x] **Storage Slot Map Analyzer**
     - **Interaction**: Visual EVM storage packing detector.
     - **How to Test**: Declare `uint128 a; uint256 b; uint128 c;` in your contract. Compile. Verify it flags **Unpacked Slots** (orange borders) indicating you are wasting gas.

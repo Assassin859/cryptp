@@ -1,12 +1,18 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "esnext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "outDir": "./dist",
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": []
   },
-  "include": ["src/**/*.ts"]
+  "include": ["main.ts", "workflow.ts", "src/policy.ts", "src/deployPolicy.ts", "src/workflow.ts"],
+  "exclude": ["src/**/*.test.ts", "node_modules", "dist"]
 }

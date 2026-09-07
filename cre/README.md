@@ -10,21 +10,17 @@ Continuity upgrade: pre–MetaMask-deploy **AI audit gate** aimed at CRE **Confi
 
 ```bash
 cd cre/aethon-audit-firewall
-npm install   # or bun install
+bun install
 npm test
-
-# Local policy evidence (no CRE CLI required):
-npx tsx src/workflow.ts
 
 # With CRE CLI (operator machine):
 cd ..
-cp .env.example .env
-cre login
-cre whoami
-cre workflow simulate ./aethon-audit-firewall --project-root ./ --target=staging-settings --env ./.env
+cp .env.example .env   # set SECRET_API_TOKEN
+cre login && cre whoami
+cre workflow simulate ./aethon-audit-firewall --project-root ./ --target=staging-settings --env ./.env --non-interactive --trigger-index 0
 ```
 
-Save simulate logs under `cre/evidence/` and `docs/cre-simulate-evidence.md`.
+Simulate evidence: `cre/evidence/cre-workflow-simulate-staging.txt` and `docs/cre-simulate-evidence.md`.
 
 ## Deploy (when access enabled)
 

@@ -1,0 +1,33 @@
+﻿# cre workflow simulate — Aethon audit firewall (staging)
+# Captured: 2026-09-07
+# Account: maitreyagaikwad859@gmail.com (Deploy Access: Not enabled)
+# Command:
+#   cd cre
+#   cre workflow simulate ./aethon-audit-firewall --project-root ./ --target=staging-settings --env ./.env --non-interactive --trigger-index 0
+
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+[OK] Workflow compiled
+[OK] Simulation limits enabled
+  Binary hash: 19c2f6ad108b03e9765f6609d94c2ce99780009fee6e66900f0ec63cfe6281f7
+  Config hash: 028b4ddc9abdb3b16a0234d94c382f9c6646697b799e8761df3c3c635d1e613e
+2026-09-07T15:59:52Z [SIMULATION] Simulator Initialized
+
+2026-09-07T15:59:52Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+--- TEE constraint ---
+Trigger requested TEE Execution; one of:
+  - AWS Nitro in us-west-2
+Simulator is not a real TEE (debug only).
+----------------------
+
+2026-09-07T15:59:52Z [USER LOG] Enclave audit complete. verdict=ALLOW
+
+[OK] Workflow Simulation Result:
+"ALLOW (verdictCode: 1, riskMask: 0, reason: Local staging policy found no flagged patterns (not a TEE/CRE verdict))"
+
+2026-09-07T15:59:52Z [SIMULATION] Execution finished signal received
+2026-09-07T15:59:52Z [SIMULATION] Skipping WorkflowEngineV2
+
+Simulation complete. Deploy access not enabled — run cre account access when ready.

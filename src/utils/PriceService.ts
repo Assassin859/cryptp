@@ -1,7 +1,12 @@
-interface PriceData {
+import { readLiveEthUsd } from './ethUsdConsumer';
+
+export type PriceSource = 'chainlink' | 'coingecko' | 'failsafe';
+
+export interface PriceData {
   eth_usd: number;
   gas_price_gwei: number;
   lastUpdate: number;
+  source: PriceSource;
 }
 
 class PriceService {
@@ -9,14 +14,13 @@ class PriceService {
   private readonly CACHE_DURATION = 1 * 60 * 1000; // 1 minute
   private isFetching = false;
 
-  // More realistic "last resort" fallbacks if network is completely down
-  private readonly FAILSAFE_ETH_PRICE = 3000; 
+  private readonly FAILSAFE_ETH_PRICE = 3000;
   private readonly FAILSAFE_GAS_PRICE = 25;
 
   async getLatestData(): Promise<PriceData> {
     const now = Date.now();
-    
-    if (this.cache && (now - this.cache.lastUpdate < this.CACHE_DURATION)) {
+
+    if (this.cache && now - this.cache.lastUpdate < this.CACHE_DURATION) {
       return this.cache;
     }
 
@@ -25,20 +29,35 @@ class PriceService {
 
     let eth_usd = this.cache?.eth_usd || this.FAILSAFE_ETH_PRICE;
     let gas_price_gwei = this.cache?.gas_price_gwei || this.FAILSAFE_GAS_PRICE;
+    let source: PriceSource = this.cache?.source || 'failsafe';
 
     try {
-      // 1. Fetch ETH Price from CoinGecko
-      const pRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
-      if (pRes.ok) {
-        const pData = await pRes.json();
-        if (pData.ethereum?.usd) eth_usd = pData.ethereum.usd;
+      // 1. Prefer Chainlink ETH/USD on Sepolia (consumer live or feed proxy)
+      try {
+        const cl = await readLiveEthUsd();
+        if (cl.usd > 0 && Number.isFinite(cl.usd)) {
+          eth_usd = cl.usd;
+          source = 'chainlink';
+        }
+      } catch (err) {
+        console.warn('[PriceService] Chainlink ETH/USD read failed, trying CoinGecko:', err);
+        const pRes = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
+        );
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          if (pData.ethereum?.usd) {
+            eth_usd = pData.ethereum.usd;
+            source = 'coingecko';
+          }
+        }
       }
 
-      // 2. Fetch Gas Price (Try Public RPCs first as they're faster/free)
+      // 2. Gas price via public mainnet RPCs
       const rpcUrls = [
         'https://cloudflare-eth.com',
         'https://eth.llamarpc.com',
-        'https://rpc.ankr.com/eth'
+        'https://rpc.ankr.com/eth',
       ];
 
       for (const url of rpcUrls) {
@@ -46,30 +65,41 @@ class PriceService {
           const rpcRes = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_gasPrice', params: [], id: 1 }),
-            signal: AbortSignal.timeout(3000)
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'eth_gasPrice',
+              params: [],
+              id: 1,
+            }),
+            signal: AbortSignal.timeout(3000),
           });
-          
+
           if (rpcRes.ok) {
             const rpcData = await rpcRes.json();
             if (rpcData.result) {
               const wei = BigInt(rpcData.result);
               gas_price_gwei = Number(wei / 1000000000n);
-              break; // Success
+              break;
             }
           }
         } catch {
-          continue; // Try next RPC
+          continue;
         }
       }
     } catch (error) {
       console.warn('[PriceService] Network error during update, using fallback/cache:', error);
+      if (!this.cache) source = 'failsafe';
     } finally {
       this.isFetching = false;
     }
 
-    this.cache = { eth_usd, gas_price_gwei, lastUpdate: now };
+    this.cache = { eth_usd, gas_price_gwei, lastUpdate: now, source };
     return this.cache;
+  }
+
+  /** Force refresh bypassing cache (e.g. after onchain settle). */
+  invalidateCache(): void {
+    this.cache = null;
   }
 
   async getEthPrice(): Promise<number> {
@@ -86,20 +116,14 @@ class PriceService {
     return ethAmount * ethPrice;
   }
 
-  /**
-   * Returns a dynamic multiplier for L2 networks based on current observed mainnet gas.
-   * In a real system, these would be fetched from specific L2 sequencers.
-   */
   getL2GasPrice(mainnetGwei: number, network: 'base' | 'optimism' | 'arbitrum'): number {
-    // Current average ratios (relative to L1 gas)
     const multipliers = {
-      base: 0.015,     // L2s are significantly cheaper post-Dencun/EIP-4844
+      base: 0.015,
       optimism: 0.012,
-      arbitrum: 0.010
+      arbitrum: 0.010,
     };
     return Math.max(0.001, mainnetGwei * multipliers[network]);
   }
 }
 
 export const priceService = new PriceService();
-
