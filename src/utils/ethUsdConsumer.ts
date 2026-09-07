@@ -5,6 +5,7 @@ import { BrowserProvider, Contract, JsonRpcProvider, formatUnits, type Signer } 
 import {
   AGGREGATOR_V3_ABI,
   ETH_USD_CONSUMER_ABI,
+  SEPOLIA_CHAIN_ID,
   SEPOLIA_ETH_USD_FEED,
   SEPOLIA_RPC_URLS,
   getEthUsdConsumerAddress,
@@ -106,6 +107,15 @@ export async function settleEthUsdOnchain(opts: {
 }): Promise<{ txHash: string; roundId: bigint; answer: bigint; updatedAt: number }> {
   const address = (opts.consumerAddress || getEthUsdConsumerAddress()).trim();
   if (!address) throw new Error('VITE_ETH_USD_CONSUMER_ADDRESS is not set');
+
+  const network = await opts.signer.provider?.getNetwork();
+  if (!network || Number(network.chainId) !== SEPOLIA_CHAIN_ID) {
+    throw new Error(
+      `settleLatestPrice requires Sepolia (${SEPOLIA_CHAIN_ID}); wallet is on ${
+        network ? Number(network.chainId) : 'unknown'
+      }`
+    );
+  }
 
   const consumer = new Contract(address, ETH_USD_CONSUMER_ABI, opts.signer);
   const tx = await consumer.settleLatestPrice();

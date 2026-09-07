@@ -27,6 +27,7 @@ import { useWeb3 } from '../context/Web3Context';
 import { getEthUsdConsumerAddress, SEPOLIA_CHAIN_ID } from '../utils/ethUsdConstants';
 import { settleEthUsdOnchain } from '../utils/ethUsdConsumer';
 import { getErrorMessage } from '../utils/errorMessage';
+import { BrowserProvider } from 'ethers';
 
 interface MeasurementGateProps {
   children: React.ReactNode;
@@ -131,9 +132,28 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
         return;
       }
     }
+    if (!window.ethereum) {
+      setSettleError('MetaMask is not available.');
+      return;
+    }
+    let settleSigner = signer;
+    try {
+      const fresh = new BrowserProvider(window.ethereum);
+      const net = await fresh.getNetwork();
+      if (Number(net.chainId) !== SEPOLIA_CHAIN_ID) {
+        setSettleError(
+          `Wallet is not on Sepolia (got ${Number(net.chainId)}). Refuse to settle.`
+        );
+        return;
+      }
+      settleSigner = await fresh.getSigner();
+    } catch (e) {
+      setSettleError(getErrorMessage(e) || 'Could not verify Sepolia before settle.');
+      return;
+    }
     setSettleBusy(true);
     try {
-      const { txHash } = await settleEthUsdOnchain({ signer, consumerAddress });
+      const { txHash } = await settleEthUsdOnchain({ signer: settleSigner, consumerAddress });
       setSettleTx(txHash);
       priceService.invalidateCache();
       await refreshMarket();

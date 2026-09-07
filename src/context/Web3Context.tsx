@@ -115,33 +115,56 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchNetwork = async (targetChainId: number) => {
-    if (!window.ethereum) return;
+    if (!window.ethereum) {
+      const msg = 'MetaMask is not installed';
+      setError(msg);
+      throw new Error(msg);
+    }
     const chainIdHex = `0x${targetChainId.toString(16)}`;
     try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: chainIdHex }]
-      });
-    } catch (err: unknown) {
-      const e = err as { code?: number; message?: string };
-      if (e.code === 4902) {
-        const addParams = CHAIN_ADD_PARAMS[targetChainId];
-        if (addParams) {
-          try {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [addParams],
-            });
-            return;
-          } catch (addErr: unknown) {
-            setError(getErrorMessage(addErr) || `Failed to add chain ${targetChainId}`);
-            return;
-          }
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: chainIdHex }],
+        });
+      } catch (err: unknown) {
+        const e = err as { code?: number; message?: string };
+        if (e.code !== 4902) {
+          const msg = e.message || 'Network switch failed';
+          setError(msg);
+          throw err instanceof Error ? err : new Error(msg);
         }
-        setError(`Chain ${targetChainId} not found in MetaMask`);
-      } else {
-        setError(e.message || 'Network switch failed');
+        const addParams = CHAIN_ADD_PARAMS[targetChainId];
+        if (!addParams) {
+          const msg = `Chain ${targetChainId} not found in MetaMask`;
+          setError(msg);
+          throw new Error(msg);
+        }
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [addParams],
+          });
+        } catch (addErr: unknown) {
+          const msg = getErrorMessage(addErr) || `Failed to add chain ${targetChainId}`;
+          setError(msg);
+          throw addErr instanceof Error ? addErr : new Error(msg);
+        }
       }
+
+      const browserProvider = new BrowserProvider(window.ethereum);
+      const network = await browserProvider.getNetwork();
+      if (Number(network.chainId) !== targetChainId) {
+        const msg = `Wallet is on chain ${Number(network.chainId)}, expected ${targetChainId}`;
+        setError(msg);
+        throw new Error(msg);
+      }
+      await updateWalletState(browserProvider);
+    } catch (err: unknown) {
+      // Ensure UI error is set even for unexpected throws; always rethrow for callers.
+      const msg = getErrorMessage(err) || 'Network switch failed';
+      setError(msg);
+      throw err instanceof Error ? err : new Error(msg);
     }
   };
 

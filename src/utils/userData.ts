@@ -98,6 +98,34 @@ export async function computeContentHash(content: string): Promise<string> {
     .join('');
 }
 
+export type ProjectSourceFile = { name: string; content: string };
+
+/**
+ * Canonical multi-file payload for CRE hash bind + policy scan.
+ * Sort by name, then `name\0content\n` per file.
+ */
+export function canonicalizeProjectSources(files: ProjectSourceFile[]): string {
+  return [...files]
+    .filter((f) => f && typeof f.name === 'string')
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((f) => `${f.name}\0${f.content ?? ''}\n`)
+    .join('');
+}
+
+/** SHA-256 of the full compile project source set (not just the active tab). */
+export async function computeProjectContentHash(files: ProjectSourceFile[]): Promise<{
+  hash: string;
+  canonical: string;
+}> {
+  const list =
+    files.length > 0
+      ? files
+      : ([{ name: 'Contract.sol', content: '' }] as ProjectSourceFile[]);
+  const canonical = canonicalizeProjectSources(list);
+  const hash = await computeContentHash(canonical);
+  return { hash, canonical };
+}
+
 function stripEphemeralCompilationFields(result: CompilationResult): CompilationResult {
   const { simulation: _sim, ...rest } = result;
   return rest;

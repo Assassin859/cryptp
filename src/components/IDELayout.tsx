@@ -35,7 +35,8 @@ import {
   saveDeployment,
   getDeployments,
   deleteDeployments,
-  computeContentHash,
+  computeProjectContentHash,
+  type ProjectSourceFile,
   saveGasProfile,
   deploymentToSimulation,
   type SaveDeploymentPayload,
@@ -83,6 +84,7 @@ import {
 } from '../utils/userData';
 import WalletConnect from './WalletConnect';
 import { ethers } from 'ethers';
+import { SEPOLIA_CHAIN_ID } from '../utils/ethUsdConstants';
 
 interface IDELayoutProps {
   userId: string;
@@ -92,7 +94,7 @@ interface IDELayoutProps {
 import { useWeb3 } from '../context/Web3Context';
 
 const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
-  const { account, networkName, balance, isConnected, isConnecting, connect, signer } = useWeb3();
+  const { account, networkName, balance, isConnected, isConnecting, connect, signer, chainId, provider } = useWeb3();
 
   // Mobile-safe initial layouts
   const isMobileInitial = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
@@ -166,7 +168,20 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   const lastCompilationId = useRef<string | null>(null);
   const lastCompiledSourceRef = useRef<string | null>(null);
   const lastCompiledHashRef = useRef<string | null>(null);
+  /** Canonical multi-file payload bound to lastCompiledHashRef (CRE audit body). */
+  const lastCompiledAuditSourceRef = useRef<string | null>(null);
   const prevCodeByFileRef = useRef<Record<string, string>>({});
+
+  const projectFilesForHash = (activeCode: string, fallbackName = 'Contract.sol'): ProjectSourceFile[] => {
+    const files = currentProject?.files;
+    if (!files?.length) {
+      return [{ name: fallbackName, content: activeCode }];
+    }
+    return files.map((f: ContractFile) => ({
+      name: f.name,
+      content: f.id === activeFileId ? activeCode : f.content,
+    }));
+  };
 
   const [activeDeployment, setActiveDeployment] = useState<{
     address: string;
@@ -326,9 +341,16 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             if (result && result.success && result.bytecode) {
               setHasCompiledInSession(true);
               const activeFile = mostRecent.files?.find(f => f.id === mostRecent.active_file_id) || mostRecent.files?.[0];
-              const contentHash = await computeContentHash(activeCode);
+              const filesForHash: ProjectSourceFile[] = (mostRecent.files || []).map((f) => ({
+                name: f.name,
+                content: f.id === activeFile?.id ? activeCode : f.content,
+              }));
+              const { hash: contentHash, canonical } = await computeProjectContentHash(
+                filesForHash.length ? filesForHash : [{ name: activeFileName, content: activeCode }]
+              );
               lastCompiledSourceRef.current = activeCode;
               lastCompiledHashRef.current = contentHash;
+              lastCompiledAuditSourceRef.current = canonical;
               const report = scanContract(activeCode);
               setSecurityReport(report);
               const savedCompilation = await saveCompilation(userId, mostRecent.id, result, {
@@ -552,13 +574,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         const latest = await getLatestCompilation(userId, currentProject.id, activeFileId);
         if (!latest?.result?.success) return;
 
-        const hash = await computeContentHash(code);
+        const { hash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
         if (latest.content_hash && latest.content_hash !== hash) {
           setCompileResult(null);
           setSecurityReport(null);
           setHasCompiledInSession(false);
           lastCompiledSourceRef.current = null;
           lastCompiledHashRef.current = null;
+          lastCompiledAuditSourceRef.current = null;
           return;
         }
 
@@ -568,6 +591,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         setHasCompiledInSession(true);
         lastCompiledSourceRef.current = code;
         lastCompiledHashRef.current = latest.content_hash || hash;
+        lastCompiledAuditSourceRef.current = canonical;
       } catch (e) {
         console.error('Failed to restore compilation:', e);
       }
@@ -656,8 +680,9 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
 
        if (activeFileId) {
          try {
-           const contentHash = await computeContentHash(code);
+           const { hash: contentHash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
            lastCompiledHashRef.current = contentHash;
+           lastCompiledAuditSourceRef.current = canonical;
            const saved = await saveCompilation(userId, currentProject.id, result, {
              fileId: activeFileId,
              contentHash,
@@ -669,9 +694,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
          }
        } else {
          try {
-           lastCompiledHashRef.current = await computeContentHash(code);
+           const { hash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
+           lastCompiledHashRef.current = hash;
+           lastCompiledAuditSourceRef.current = canonical;
          } catch {
            lastCompiledHashRef.current = null;
+           lastCompiledAuditSourceRef.current = null;
          }
        }
 
@@ -681,6 +709,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
        setHasCompiledInSession(false);
        lastCompiledSourceRef.current = null;
        lastCompiledHashRef.current = null;
+       lastCompiledAuditSourceRef.current = null;
        setSecurityReport(null);
     }
   };
@@ -1534,6 +1563,22 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             });
             return;
           }
+          const liveProvider = signer.provider ?? provider;
+          if (!liveProvider) {
+            throw new Error('Wallet provider unavailable; reconnect MetaMask before promoting.');
+          }
+          const net = await liveProvider.getNetwork();
+          const liveChainId = Number(net.chainId);
+          if (liveChainId !== SEPOLIA_CHAIN_ID) {
+            throw new Error(
+              `Wrong network for Continuity promote: MetaMask is on chain ${liveChainId}. Switch to Sepolia (${SEPOLIA_CHAIN_ID}) before deploying.`
+            );
+          }
+          if (chainId != null && chainId !== liveChainId) {
+            throw new Error(
+              `Wallet chain mismatch (UI ${chainId} vs provider ${liveChainId}). Reconnect and try again.`
+            );
+          }
           const processedArgs = promoteAbi
             ? parseConstructorArgsFromAbi(promoteAbi, {})
             : [];
@@ -1957,7 +2002,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                         report={securityReport}
                         isScanning={isScanning}
                         hasCompileError={compileResult?.success === false}
-                        sourceCode={code}
+                        sourceCode={lastCompiledAuditSourceRef.current || code}
                         sourceHash={lastCompiledHashRef.current || undefined}
                         network={networkName || 'sepolia'}
                       />
