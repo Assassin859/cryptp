@@ -16,7 +16,7 @@
   "evms": [
     {
       "chain_selector_name": "ethereum-testnet-sepolia",
-      "consumer_address": "",
+      "consumer_address": "0x415c83dDA4E50f50Cd45EBD79FE1fb13a6B21Dc0",
       "gas_limit": 500000
     }
   ]

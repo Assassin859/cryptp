@@ -53,6 +53,8 @@ npm run deploy:audit-consumer
 # Set VITE_CRE_CONSUMER_ADDRESS and cre config evms[0].consumer_address
 ```
 
+**Live on Sepolia:** [`0x415c83dDA4E50f50Cd45EBD79FE1fb13a6B21Dc0`](https://sepolia.etherscan.io/address/0x415c83dDA4E50f50Cd45EBD79FE1fb13a6B21Dc0) — see [`cre/DEPLOY.md`](../cre/DEPLOY.md).
+
 Staging settlement: after a gateable stub verdict, Confidential → **Record verdict on Sepolia** calls `recordVerdict` as the wallet that is **owner or authorizedReporter**. Production should use Keystone / DON `writeReport` instead.
 
 ### 3. Trigger proxy
