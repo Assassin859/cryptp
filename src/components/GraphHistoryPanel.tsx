@@ -126,6 +126,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
         setError(getErrorMessage(e) || 'Failed to query The Graph');
       }
       setRows([]);
+      setRegistered(null);
     } finally {
       setLoading(false);
     }

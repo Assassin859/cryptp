@@ -78,8 +78,12 @@ class PriceService {
             const rpcData = await rpcRes.json();
             if (rpcData.result) {
               const wei = BigInt(rpcData.result);
-              gas_price_gwei = Number(wei / 1000000000n);
-              break;
+              const gwei = Number(wei / 1000000000n);
+              // RPC 0x0 is missing/invalid — keep last good or failsafe, never cache 0.
+              if (Number.isFinite(gwei) && gwei > 0) {
+                gas_price_gwei = gwei;
+                break;
+              }
             }
           }
         } catch {

@@ -228,7 +228,10 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
 
   const safetyScore = securityReport?.score ?? 100;
   const currentEthPrice = marketData?.eth_usd || 3000;
-  const currentGasGwei = marketData?.gas_price_gwei || 25;
+  const currentGasGwei =
+    marketData?.gas_price_gwei && marketData.gas_price_gwei > 0
+      ? marketData.gas_price_gwei
+      : 25;
 
   const isDirty = !isCompiled && !!compileResult;
 
@@ -426,7 +429,9 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
                   </div>
                   <div className="mt-1 text-[8px] text-gray-500 flex items-center justify-between">
                     <span className="px-1 py-0.5 bg-green-500/10 text-green-400 rounded">
-                      {((1 - (priceService.getL2GasPrice(currentGasGwei, 'base') / currentGasGwei)) * 100).toFixed(1)}% Cheaper
+                      {currentGasGwei > 0
+                        ? `${((1 - (priceService.getL2GasPrice(currentGasGwei, 'base') / currentGasGwei)) * 100).toFixed(1)}% Cheaper`
+                        : '—'}
                     </span>
                     <ChevronRight className="size-3 group-hover:translate-x-1 transition-transform" />
                   </div>
