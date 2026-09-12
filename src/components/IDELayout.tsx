@@ -462,11 +462,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                 const trace = await browserVM.getTransactionTrace(txResult.transactionHash);
                 if (trace) {
                   const sourceMap = parseSourceMap(result.sourceMap || '');
+                  const profileBytecode = result.deployedBytecode || result.bytecode;
                   const traceResult = mapTraceToLines(
                     trace,
                     sourceMap,
                     activeCode,
-                    result.bytecode,
+                    profileBytecode,
                     browserVM.getTraceDepthFilter()
                   );
                   setProfilerData({
@@ -1466,11 +1467,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       const trace = await browserVM.getTransactionTrace(payload.txHash);
       if (trace) {
         const sourceMap = parseSourceMap(compileResult.sourceMap);
+        const profileBytecode = compileResult.deployedBytecode || compileResult.bytecode;
         const result = mapTraceToLines(
           trace,
           sourceMap,
           code,
-          compileResult.bytecode,
+          profileBytecode,
           browserVM.getTraceDepthFilter()
         );
         setProfilerData({

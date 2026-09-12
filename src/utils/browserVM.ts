@@ -335,11 +335,22 @@ class BrowserVM {
       const txHashStr = bytesToHex(tx.hash());
 
       const trace: TransactionTrace = { gas: 0, returnValue: "", structLogs: [] };
+      let prevGasLeft: bigint | null = null;
       const stepListener = (step: { pc: number; opcode: { name: string; fee: number }; gasLeft: { toString(): string }; depth: number }, next?: () => void) => {
+          const gasLeft = BigInt(step.gasLeft.toString());
+          // Prefer real gas delta over static opcode.fee (SSTORE/CALL etc. are dynamic).
+          let gasCost = step.opcode.fee;
+          if (prevGasLeft !== null && prevGasLeft >= gasLeft) {
+            const delta = prevGasLeft - gasLeft;
+            if (delta > 0n && delta <= BigInt(Number.MAX_SAFE_INTEGER)) {
+              gasCost = Number(delta);
+            }
+          }
+          prevGasLeft = gasLeft;
           trace.structLogs.push({
               pc: step.pc,
               op: step.opcode.name,
-              gasCost: step.opcode.fee,
+              gasCost,
               gas: step.gasLeft.toString(),
               depth: step.depth,
           });
@@ -513,11 +524,22 @@ class BrowserVM {
         const txHashStr = bytesToHex(tx.hash());
 
         const trace: TransactionTrace = { gas: 0, returnValue: "", structLogs: [] };
+        let prevGasLeft: bigint | null = null;
         const stepListener = (step: { pc: number; opcode: { name: string; fee: number }; gasLeft: { toString(): string }; depth: number }, next?: () => void) => {
+            const gasLeft = BigInt(step.gasLeft.toString());
+            // Prefer real gas delta over static opcode.fee (SSTORE/CALL etc. are dynamic).
+            let gasCost = step.opcode.fee;
+            if (prevGasLeft !== null && prevGasLeft >= gasLeft) {
+              const delta = prevGasLeft - gasLeft;
+              if (delta > 0n && delta <= BigInt(Number.MAX_SAFE_INTEGER)) {
+                gasCost = Number(delta);
+              }
+            }
+            prevGasLeft = gasLeft;
             trace.structLogs.push({
                 pc: step.pc,
                 op: step.opcode.name,
-                gasCost: step.opcode.fee,
+                gasCost,
                 gas: step.gasLeft.toString(),
                 depth: step.depth,
             });

@@ -117,7 +117,7 @@ app.post('/compile', async (req, res) => {
     settings: {
       outputSelection: {
         '*': {
-          '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode.sourceMap'],
+          '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode.object', 'evm.deployedBytecode.sourceMap'],
         },
       },
     },
@@ -158,6 +158,7 @@ app.post('/compile', async (req, res) => {
       success: true,
       abi: contract.abi,
       bytecode: contract.evm.bytecode.object,
+      deployedBytecode: contract.evm.deployedBytecode?.object,
       sourceMap: contract.evm.deployedBytecode?.sourceMap,
       errors: output.errors,
     });

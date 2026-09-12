@@ -172,7 +172,7 @@ self.onmessage = async (event) => {
       settings: {
         outputSelection: {
           '*': {
-            '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode.sourceMap']
+            '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode.object', 'evm.deployedBytecode.sourceMap']
           }
         },
         optimizer: { enabled: true, runs: 200 }
@@ -232,6 +232,7 @@ self.onmessage = async (event) => {
       success: true,
       abi: contract.abi,
       bytecode: contract.evm.bytecode.object,
+      deployedBytecode: contract.evm.deployedBytecode?.object,
       sourceMap: contract.evm.deployedBytecode?.sourceMap,
       errors: output.errors || []
     });

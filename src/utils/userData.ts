@@ -75,7 +75,7 @@ export interface GasProfile {
   deployment_id?: string;
   gas_used: number;
   contract_size: number;
-  security_score?: number;
+  security_score?: number | null;
   tx_hash?: string;
   quality?: HeatmapQuality;
   unmapped_gas?: number;
@@ -331,7 +331,7 @@ export interface SaveGasProfilePayload {
   deploymentId?: string;
   gasUsed: number;
   contractSize: number;
-  securityScore?: number;
+  securityScore?: number | null;
   txHash?: string;
   quality?: HeatmapQuality;
   unmappedGas?: number;
@@ -354,7 +354,10 @@ export const saveGasProfile = async (userId: string, payload: SaveGasProfilePayl
         deployment_id: payload.deploymentId ?? null,
         gas_used: payload.gasUsed,
         contract_size: payload.contractSize,
-        security_score: payload.securityScore ?? 100,
+        security_score:
+          payload.securityScore != null && payload.securityScore >= 0
+            ? payload.securityScore
+            : null,
         tx_hash: payload.txHash ?? null,
         quality: payload.quality ?? null,
         unmapped_gas: payload.unmappedGas ?? 0,

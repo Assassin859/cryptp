@@ -30,7 +30,10 @@ export interface CompilationResult {
   success: boolean;
   errors?: CompilationError[];
   abi?: unknown[];
+  /** Creation bytecode (for deploy). */
   bytecode?: string;
+  /** Runtime/deployed bytecode — use for post-deploy gas heatmap PC mapping. */
+  deployedBytecode?: string;
   sourceMap?: string;
   sourceCode?: string;
   code?: string;
@@ -83,6 +86,7 @@ type WorkerReply = {
   errors?: CompilationError[];
   abi?: unknown[];
   bytecode?: string;
+  deployedBytecode?: string;
   sourceMap?: string;
   error?: string;
 };
@@ -391,16 +395,19 @@ const compileInWorker = async (sourceCode: string, contractName: string = 'Contr
       120000
     );
 
-    const { success, errors, abi, bytecode, sourceMap } = reply;
+    const { success, errors, abi, bytecode, deployedBytecode, sourceMap } = reply;
 
     if (success && bytecode) {
       const contractSize = bytecode.length / 2;
       const gasEstimate = Math.max(21000, contractSize * 200);
+      const norm = (hex?: string) =>
+        !hex ? undefined : hex.startsWith('0x') ? hex : '0x' + hex;
       return {
         success: true,
         errors,
         abi,
-        bytecode: bytecode.startsWith('0x') ? bytecode : '0x' + bytecode,
+        bytecode: norm(bytecode),
+        deployedBytecode: norm(deployedBytecode),
         sourceMap,
         sourceCode,
         code: sourceCode,
