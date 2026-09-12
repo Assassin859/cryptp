@@ -1,4 +1,4 @@
-# The Graph × Aethon (CryptP IDE)
+# The Graph × Aethon
 
 Aethon uses a **platform-managed** Sepolia subgraph so users index and query contract history **inside the IDE**. **Supabase remains the app database** (workspaces, files, compilations, deployments, gas profiles, settings).
 
@@ -13,7 +13,7 @@ Do **not** add Graph event rows to Supabase. `deployments` rows are for IDE repl
 
 **Migration (existing DBs):** run [`supabase-migration-graph-prefs.sql`](../supabase-migration-graph-prefs.sql) in the Supabase SQL editor.
 
-## User flow (stay in CryptP)
+## User flow (stay in Aethon)
 
 1. Compile and deploy **SimpleStorage** to Sepolia (MetaMask).
 2. When prompted, choose **Open Indexed** (or open the **Indexed** activity icon).
@@ -22,7 +22,7 @@ Do **not** add Graph event rows to Supabase. `deployments` rows are for IDE repl
 5. Back in **Indexed**, click **Refresh** to see `ValueChanged` rows from The Graph.
 6. **Problem Audit → Confidential** also loads The Graph context for the active Sepolia contract (registration + latest `ValueChanged` events) so Continuity audit UX uses live indexed data—not only a history table.
 
-Default path uses the CryptP platform endpoint (`VITE_GRAPH_*`). No Studio account required for that path.
+Default path uses the Aethon platform endpoint (`VITE_GRAPH_*`). No Studio account required for that path.
 
 ### Optional: use your own Graph Studio
 
@@ -59,7 +59,7 @@ npm run build
 # Deploy via Graph Studio / graph CLI
 ```
 
-4. Set `VITE_GRAPH_ENDPOINT` to the Studio query URL and redeploy the CryptP frontend.
+4. Set `VITE_GRAPH_ENDPOINT` to the Studio query URL and redeploy the Aethon frontend.
 
 Details: [subgraph/README.md](../subgraph/README.md).
 

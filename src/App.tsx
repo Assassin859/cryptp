@@ -4,6 +4,7 @@ import IDELayout from './components/IDELayout';
 import Auth from './components/Auth';
 import SetupRequired from './components/SetupRequired';
 import { getSupabase, isSupabaseConfigured } from './utils/supabaseClient';
+import { lsGet, lsRemove, sessionGet, sessionSet, isPreservedStorageKey } from './utils/aethonStorage';
 
 const IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'] as const;
@@ -23,8 +24,8 @@ function App() {
 
     const checkSession = async () => {
       // Mark first boot; do not signOut on empty getSession — that races OAuth/storage restore.
-      if (!sessionStorage.getItem('cryptp-session-init')) {
-        sessionStorage.setItem('cryptp-session-init', 'true');
+      if (!sessionGet('session-init')) {
+        sessionSet('session-init', 'true');
       }
 
       const sessionResult = await supabase.auth.getSession();
@@ -33,9 +34,9 @@ function App() {
         setUserId(user.id);
 
         let localNewUser = false;
-        if (typeof window !== 'undefined' && window.localStorage.getItem('cryptp-new-user') === 'true') {
+        if (typeof window !== 'undefined' && lsGet('new-user') === 'true') {
           localNewUser = true;
-          window.localStorage.removeItem('cryptp-new-user');
+          lsRemove('new-user');
         }
 
         const created = new Date(user.created_at).getTime();
@@ -59,9 +60,9 @@ function App() {
         setUserId(user.id);
 
         let localNewUser = false;
-        if (typeof window !== 'undefined' && window.localStorage.getItem('cryptp-new-user') === 'true') {
+        if (typeof window !== 'undefined' && lsGet('new-user') === 'true') {
           localNewUser = true;
-          window.localStorage.removeItem('cryptp-new-user');
+          lsRemove('new-user');
         }
 
         const created = new Date(user.created_at).getTime();
@@ -92,12 +93,12 @@ function App() {
       console.log('Inactivity timeout reached. Signing out...');
       await supabase.auth.signOut();
       setUserId('');
-      // Preserve *-keys* (AI/RPC + cryptp-graph-keys Studio prefs)
+      // Preserve *-keys* (AI/RPC + Graph/CRE Studio prefs) under aethon-* and legacy cryptp-*
       Object.keys(localStorage)
         .filter(
           (key) =>
-            key.startsWith('cryptp-') &&
-            !key.includes('-keys') &&
+            (key.startsWith('aethon-') || key.startsWith('cryptp-')) &&
+            !isPreservedStorageKey(key) &&
             !key.includes('new-user') &&
             !key.includes('dismiss-link-modal')
         )

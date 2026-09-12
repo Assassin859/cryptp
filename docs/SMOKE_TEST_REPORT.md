@@ -1,4 +1,4 @@
-# CryptP IDE Smoke Test Report
+# Aethon Smoke Test Report
 
 **Date:** 2026-09-06  
 **Environment:** local dev (`npm run dev`)  

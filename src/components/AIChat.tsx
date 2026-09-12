@@ -17,6 +17,7 @@ import { Project } from '../utils/userData';
 import { SecurityReport } from '../utils/securityScanner';
 import { CompilationResult, CompilationError } from '../utils/hardhatCompiler';
 import { getErrorMessage } from '../utils/errorMessage';
+import { lsGet } from '../utils/aethonStorage';
 
 interface AiKeys {
   openai?: string;
@@ -68,7 +69,7 @@ const AIChat: React.FC<AIChatProps> = ({
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hello! I am your **Elite CryptP Architect & Cybersecurity Lead**. I can help you analyze your Solidity contracts for security vulnerabilities, perform gas optimizations, or assist with architectural redesigns. How can I help you build today?',
+      content: 'Hello! I am your **Elite Aethon Architect & Cybersecurity Lead**. I can help you analyze your Solidity contracts for security vulnerabilities, perform gas optimizations, or assist with architectural redesigns. How can I help you build today?',
       timestamp: new Date()
     }
   ]);
@@ -107,9 +108,13 @@ const AIChat: React.FC<AIChatProps> = ({
 
   useEffect(() => {
     if (!user) { setAiKeys({}); return; }
-    const scopedKey = `cryptp-ai-keys-${user.id}`;
+    const scopedKey = `aethon-ai-keys-${user.id}`;
+    const legacyKey = `cryptp-ai-keys-${user.id}`;
     const load = () => {
-      try { setAiKeys(JSON.parse(localStorage.getItem(scopedKey) || '{}')); }
+      try {
+        const raw = lsGet(scopedKey) || localStorage.getItem(legacyKey) || '{}';
+        setAiKeys(JSON.parse(raw));
+      }
       catch { setAiKeys({}); }
     };
     load();
@@ -125,7 +130,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
   const [selectedModel, setSelectedModel] = useState<string>('');
   const activeModel = availableModels.find(m => m.id === selectedModel) ? selectedModel : (availableModels[0]?.id || '');
-  const aiDisplayName = activeModel ? availableModels.find(m => m.id === activeModel)?.name : "CryptP Assistant";
+  const aiDisplayName = activeModel ? availableModels.find(m => m.id === activeModel)?.name : "Aethon Assistant";
 
   const askAI = async (prompt: string) => {
      if (!activeModel) {
@@ -169,7 +174,7 @@ const AIChat: React.FC<AIChatProps> = ({
         workspaceContext += `\n\n--- FOCUSSED FILE: ${activeFileName} ---\n${activeFileCode}\n-------------------------`;
      }
 
-     const systemPrompt = `You are the **Elite CryptP Architect**, an expert-level autonomous agent.
+     const systemPrompt = `You are the **Elite Aethon Architect**, an expert-level autonomous agent.
 Your goal is to provide **extreme conciseness** and high-fidelity technical precision.
 
 Core Rules:
@@ -337,7 +342,7 @@ Insight -> Concise Bullets -> Action (if any).`;
                 {availableModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             ) : (
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#858585]">{activeModel ? availableModels[0].name : "CryptP Assistant"}</span>
+              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#858585]">{activeModel ? availableModels[0].name : "Aethon Assistant"}</span>
             )}
          </div>
          <button onClick={() => setMessages([messages[0]])} className="p-1 hover:bg-[#2d2d2d] rounded transition-colors text-[#858585] hover:text-red-400">

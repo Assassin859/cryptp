@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 /**
  * @title CryptPIndexRegistry
- * @notice Opt-in registry so CryptP's platform subgraph can index user contracts.
+ * @notice Opt-in registry so Aethon's platform subgraph can index user contracts.
  * @dev Emit ContractRegistered → subgraph creates a data-source template for known kinds.
  */
 contract CryptPIndexRegistry {

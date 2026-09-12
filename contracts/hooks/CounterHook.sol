@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 /**
  * @title CounterHook
- * @notice Educational Uniswap v4-style hook for CryptP Continuity (IDE compile → simulate → deploy).
+ * @notice Educational Uniswap v4-style hook for Aethon Continuity (IDE compile → simulate → deploy).
  * @dev Self-contained stubs so browser WASM solc can compile without pulling v4-core.
  *      Production hooks should inherit `BaseHook` from v4-periphery and be mined via CREATE2
  *      so the address encodes the correct Hooks permission flags.
@@ -139,7 +139,7 @@ contract CounterHook {
 
     /**
      * @notice IDE Continuity helper — increments afterSwapCount without PoolManager auth.
-     * @dev Not for production pools. Lets CryptP sandbox/Interact prove the hook path.
+     * @dev Not for production pools. Lets Aethon sandbox/Interact prove the hook path.
      */
     function sandboxBumpAfterSwap() external {
         unchecked {

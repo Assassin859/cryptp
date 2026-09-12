@@ -11,6 +11,7 @@ import {
   getGraphUserPrefs,
   getPlatformGraphEndpoint,
   setGraphUserPrefs,
+  clearGraphUserPrefsStorage,
   type GraphSourceMode,
   type GraphUserPrefs,
 } from '../utils/graphConstants';
@@ -23,6 +24,7 @@ import {
   type CreGateMode,
   type CreUserPrefs,
 } from '../utils/creConstants';
+import { aethonKey, lsGet, lsSet, lsRemove } from '../utils/aethonStorage';
 
 interface SettingsSidebarProps {
   user: User | null;
@@ -42,31 +44,41 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
     isDangerous?: boolean; onConfirm: () => void;
   } | null>(null);
 
-  // Scoped key helper
-  const getScopedKey = (base: string) => user ? `${base}-${user.id}` : base;
+  // Scoped key helper (aethon-* primary)
+  const getScopedKey = (base: string) => {
+    const primary = aethonKey(base);
+    return user ? `${primary}-${user.id}` : primary;
+  };
 
   React.useEffect(() => {
     if (!user) return;
     
     // Migration Logic: Move global keys to scoped keys if scoped don't exist
-    const globalAiKey = 'cryptp-ai-keys';
-    const globalRpcKey = 'cryptp-rpc-keys';
-    const scopedAiKey = getScopedKey(globalAiKey);
-    const scopedRpcKey = getScopedKey(globalRpcKey);
+    const globalAiKey = 'aethon-ai-keys';
+    const globalRpcKey = 'aethon-rpc-keys';
+    const scopedAiKey = getScopedKey('ai-keys');
+    const scopedRpcKey = getScopedKey('rpc-keys');
     
-    let currentAi = localStorage.getItem(scopedAiKey);
-    let currentRpc = localStorage.getItem(scopedRpcKey);
+    let currentAi = lsGet(scopedAiKey);
+    let currentRpc = lsGet(scopedRpcKey);
     
-    if (!currentAi && localStorage.getItem(globalAiKey)) {
-       currentAi = localStorage.getItem(globalAiKey);
-       localStorage.setItem(scopedAiKey, currentAi!);
-       localStorage.removeItem(globalAiKey); // Privacy cleanup
+    // Also check unscoped legacy cryptp globals
+    if (!currentAi) {
+      currentAi = lsGet(globalAiKey) ?? localStorage.getItem('cryptp-ai-keys');
+      if (currentAi) {
+        lsSet(scopedAiKey, currentAi);
+        lsRemove(globalAiKey);
+        localStorage.removeItem('cryptp-ai-keys');
+      }
     }
     
-    if (!currentRpc && localStorage.getItem(globalRpcKey)) {
-       currentRpc = localStorage.getItem(globalRpcKey);
-       localStorage.setItem(scopedRpcKey, currentRpc!);
-       localStorage.removeItem(globalRpcKey); // Privacy cleanup
+    if (!currentRpc) {
+      currentRpc = lsGet(globalRpcKey) ?? localStorage.getItem('cryptp-rpc-keys');
+      if (currentRpc) {
+        lsSet(scopedRpcKey, currentRpc);
+        lsRemove(globalRpcKey);
+        localStorage.removeItem('cryptp-rpc-keys');
+      }
     }
     
     try { 
@@ -77,7 +89,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
       setRpcKeys(JSON.parse(currentRpc || '{"alchemy":"","infura":"","etherscan":""}')); 
     } catch { setRpcKeys({}); }
 
-    // Cloud graph_prefs → local cryptp-graph-keys
+    // Cloud graph_prefs → local aethon-graph-keys
     void (async () => {
       try {
         const { data } = await supabase
@@ -201,8 +213,8 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
      if (!user) return;
      setIsSavingKeys(true);
      try {
-       localStorage.setItem(getScopedKey('cryptp-rpc-keys'), JSON.stringify(rpcKeys));
-       localStorage.setItem(getScopedKey('cryptp-ai-keys'), JSON.stringify(aiKeys));
+       lsSet(getScopedKey('rpc-keys'), JSON.stringify(rpcKeys));
+       lsSet(getScopedKey('ai-keys'), JSON.stringify(aiKeys));
        const graphPrefs = setGraphUserPrefs({
          mode: graphMode,
          endpoint: graphEndpoint,
@@ -238,8 +250,8 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
        onConfirm: async () => {
          setRpcKeys({});
          setAiKeys({});
-         localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
-         localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
+         lsRemove(getScopedKey('rpc-keys'));
+         lsRemove(getScopedKey('ai-keys'));
          try {
            await supabase.from('user_settings').upsert({
              user_id: user.id,
@@ -290,9 +302,12 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
           for (const p of allProjects) {
             await deleteProject(p.id);
           }
-          localStorage.removeItem(getScopedKey('cryptp-rpc-keys'));
-          localStorage.removeItem(getScopedKey('cryptp-ai-keys'));
+          lsRemove(getScopedKey('rpc-keys'));
+          lsRemove(getScopedKey('ai-keys'));
+          clearGraphUserPrefsStorage();
+          lsRemove(CRE_KEYS_STORAGE);
           localStorage.removeItem('cryptp-graph-keys');
+          localStorage.removeItem('cryptp-cre-keys');
           localStorage.removeItem(CRE_KEYS_STORAGE);
           onSignOut();
         } catch(e: any) {
@@ -546,7 +561,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
              <Database className="size-3" /> The Graph
            </h3>
            <p className="text-[9px] text-gray-500 mb-3 pl-1 leading-relaxed">
-             Default: CryptP platform subgraph. Or connect <strong className="text-gray-400">your Graph Studio</strong> query URL.
+             Default: Aethon platform subgraph. Or connect <strong className="text-gray-400">your Graph Studio</strong> query URL.
                Same controls live under the <strong className="text-gray-400">Indexed</strong> panel.
                Saved to this device and synced to your account (`user_settings.graph_prefs`).
              {!getPlatformGraphEndpoint() && (
@@ -562,7 +577,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
                     graphMode === 'platform' ? 'bg-[#007acc] text-white' : 'text-gray-500 hover:text-gray-300'
                   }`}
                 >
-                  CryptP platform
+                  Aethon platform
                 </button>
                 <button
                   type="button"

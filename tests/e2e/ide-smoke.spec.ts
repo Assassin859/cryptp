@@ -20,7 +20,7 @@ async function login(page: Page): Promise<void> {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
 
-  if (await page.getByText('CryptP setup required').isVisible().catch(() => false)) {
+  if (await page.getByText('Aethon setup required').isVisible().catch(() => false)) {
     throw new Error('SetupRequired — missing VITE_SUPABASE_* in .env');
   }
 
@@ -86,7 +86,7 @@ function projectSidebar(page: Page) {
 }
 
 
-test.describe.serial('CryptP IDE full smoke test', () => {
+test.describe.serial('Aethon full smoke test', () => {
   let page: Page;
 
   test.beforeAll(async ({ browser }) => {
@@ -116,7 +116,7 @@ test.describe.serial('CryptP IDE full smoke test', () => {
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await login(page);
-      const setup = await page.getByText('CryptP setup required').isVisible().catch(() => false);
+      const setup = await page.getByText('Aethon setup required').isVisible().catch(() => false);
       record('A1', 'Auth', 'Load /', setup ? 'FAIL' : errors.length ? 'FAIL' : 'PASS', errors.join('; ') || undefined);
     } catch (e) {
       record('A1', 'Auth', 'Load /', 'FAIL', String(e).slice(0, 200));

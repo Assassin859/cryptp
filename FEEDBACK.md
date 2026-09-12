@@ -1,4 +1,4 @@
-# FEEDBACK — Uniswap Continuity (CryptP / Aethon IDE)
+# FEEDBACK — Uniswap Continuity (Aethon)
 
 ETHOnline 2026 Continuity · Uniswap Foundation stack contribution.
 
@@ -10,7 +10,7 @@ ETHOnline 2026 Continuity · Uniswap Foundation stack contribution.
 
 ## What we built
 
-- Educational **CounterHook** (`contracts/hooks/CounterHook.sol`) — v4-style `beforeSwap` / `afterSwap` counters with self-contained type stubs so CryptP’s **browser solc** can compile without vendoring all of `v4-core`.
+- Educational **CounterHook** (`contracts/hooks/CounterHook.sol`) — v4-style `beforeSwap` / `afterSwap` counters with self-contained type stubs so Aethon’s **browser solc** can compile without vendoring all of `v4-core`.
 - IDE wiring: template id `uniswap-v4-counter-hook` in `src/utils/contractTemplates.ts`, New File picker, Token Factory **Uniswap Continuity** inject.
 - Sepolia **CREATE2** deploy via HookMiner (`scripts/hookMiner.ts` + `npm run deploy:counter-hook`) so the hook address encodes `BEFORE_SWAP | AFTER_SWAP` against PoolManager `0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`.
 - Docs: `docs/UNISWAP.md`.
@@ -21,7 +21,7 @@ This is Continuity **tooling**: we extended an existing IDE’s compile→deploy
 
 ## What worked
 
-1. **Self-contained stubs for IDE compile** — Pulling full `v4-core` / `v4-periphery` into a browser WASM pipeline is heavy. An educational hook with inlined `PoolKey` / `SwapParams` / permission flags let us ship a working CryptP template in one session.
+1. **Self-contained stubs for IDE compile** — Pulling full `v4-core` / `v4-periphery` into a browser WASM pipeline is heavy. An educational hook with inlined `PoolKey` / `SwapParams` / permission flags let us ship a working Aethon template in one session.
 2. **Official Sepolia PoolManager address** is easy to find on [developers.uniswap.org deployments](https://developers.uniswap.org/docs/protocols/v4/deployments).
 3. **“First hook” guide** ([docs](https://docs.uniswap.org/contracts/v4/guides/hooks/your-first-hook)) is clear for Foundry + `BaseHook`; good conceptual map for `getHookPermissions` and afterSwap returns.
 
@@ -29,7 +29,7 @@ This is Continuity **tooling**: we extended an existing IDE’s compile→deploy
 
 ## What was painful / failed expectations
 
-1. **Hook address flags — solved for Continuity** — We initially hit the CREATE2 permission-bit requirement (plain `deploy()` does not attach to live PoolManager). CryptP now ships a Hardhat HookMiner + CREATE2 Deployer Proxy path (`scripts/hookMiner.ts`) so Sepolia demos encode `BEFORE_SWAP|AFTER_SWAP`. A **first-class Hardhat snippet** in Uniswap’s first-hook guide would still help other IDE/tooling teams.
+1. **Hook address flags — solved for Continuity** — We initially hit the CREATE2 permission-bit requirement (plain `deploy()` does not attach to live PoolManager). Aethon now ships a Hardhat HookMiner + CREATE2 Deployer Proxy path (`scripts/hookMiner.ts`) so Sepolia demos encode `BEFORE_SWAP|AFTER_SWAP`. A **first-class Hardhat snippet** in Uniswap’s first-hook guide would still help other IDE/tooling teams.
 2. **Browser tooling gap** — No first-class path for “compile a BaseHook in the browser without bundling all of v4.” We wished for a published **minimal interface package** (or CDN solc remapping) aimed at educational / IDE embeds.
 3. **Constructor + sandbox auth** — Real hooks gate on `msg.sender == poolManager`. For IDE Interact demos we added `sandboxBumpAfterSwap()` clearly marked non-production. A documented “mock PoolManager for local teaching” pattern would reduce reinventing this.
 

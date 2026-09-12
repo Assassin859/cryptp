@@ -1,6 +1,6 @@
 <div align="center">
   <img src="public/aethon-logo.png" alt="Aethon" width="96" height="96" />
-  <h1>Aethon · CryptP IDE</h1>
+  <h1>Aethon</h1>
   <p><b>Browser-Native Ethereum Lab</b></p>
   <p>
     <a href="https://cryptp-production.up.railway.app/">Live demo</a>
@@ -11,7 +11,7 @@
   </p>
 </div>
 
-**Aethon** (repo **CryptP**) is a professional-grade Solidity IDE that runs **entirely in the browser** — engineered by **[Maitreya Gaikwad](https://github.com/Assassin859)**. Zero local toolchain: write, compile (WASM), simulate, audit, and deploy.
+**Aethon** (repo [Assassin859/cryptp](https://github.com/Assassin859/cryptp)) is a professional-grade Solidity IDE that runs **entirely in the browser** — engineered by **[Maitreya Gaikwad](https://github.com/Assassin859)**. Zero local toolchain: write, compile (WASM), simulate, audit, and deploy.
 
 ![Aethon cover](public/aethon-cover.png)
 
@@ -45,7 +45,7 @@ graph TD
     D -- Promotion --> G[MetaMask / Live Network]
 ```
 
-### Why Aethon / CryptP?
+### Why Aethon?
 - **Hyper-Local Performance**: Compiles Solidity in a background WASM worker.
 - **True In-Browser EVM**: `@ethereumjs/vm` for accurate local state.
 - **Insight-Driven Profiling**: Line-level gas heatmaps.

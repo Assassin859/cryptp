@@ -490,10 +490,18 @@ export const migrateLocalStorageToSupabase = async (userId: string) => {
       return;
     }
 
-    const code = localStorage.getItem(`cryptp-${userId}-code`);
-    const selectedTemplate = localStorage.getItem(`cryptp-${userId}-selectedTemplate`);
-    const compileResultStr = localStorage.getItem(`cryptp-${userId}-compileResult`);
-    const simulationsStr = localStorage.getItem(`cryptp-${userId}-simulations`);
+    const code =
+      localStorage.getItem(`aethon-${userId}-code`) ||
+      localStorage.getItem(`cryptp-${userId}-code`);
+    const selectedTemplate =
+      localStorage.getItem(`aethon-${userId}-selectedTemplate`) ||
+      localStorage.getItem(`cryptp-${userId}-selectedTemplate`);
+    const compileResultStr =
+      localStorage.getItem(`aethon-${userId}-compileResult`) ||
+      localStorage.getItem(`cryptp-${userId}-compileResult`);
+    const simulationsStr =
+      localStorage.getItem(`aethon-${userId}-simulations`) ||
+      localStorage.getItem(`cryptp-${userId}-simulations`);
 
     if (code) {
       const project = await createProject(userId, {

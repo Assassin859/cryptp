@@ -167,7 +167,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
           </div>
           <ol className="text-gray-300 space-y-3 list-decimal list-inside">
             <li className="pl-2">Click the <strong>▶ Compile</strong> button in the editor toolbar</li>
-            <li className="pl-2">CryptP runs the <strong>Solc WASM compiler</strong> directly in your browser — no backend, no install required</li>
+            <li className="pl-2">Aethon runs the <strong>Solc WASM compiler</strong> directly in your browser — no backend, no install required</li>
             <li className="pl-2">The compiler auto-detects your <code className="bg-gray-800 px-1 rounded text-sm">pragma solidity</code> version and loads the correct Solc binary</li>
             <li className="pl-2">Errors appear in the <strong>Output</strong> panel with exact line numbers</li>
           </ol>
@@ -183,7 +183,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
           </div>
           <ol className="text-gray-300 space-y-3 list-decimal list-inside">
             <li className="pl-2">After compiling, open the <strong>Problem Audit</strong> tab in the bottom panel</li>
-            <li className="pl-2">CryptP runs <strong>15 AST-based security rules</strong> — reentrancy, tx.origin, overflow, selfdestruct, and more</li>
+            <li className="pl-2">Aethon runs <strong>15 AST-based security rules</strong> — reentrancy, tx.origin, overflow, selfdestruct, and more</li>
             <li className="pl-2">Check the <strong>Analytics</strong> sidebar (📊) for the Security Radar and Market Cost Projection</li>
             <li className="pl-2">Aim for a score of <strong>90+</strong> before deploying to mainnet</li>
           </ol>
@@ -214,7 +214,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
             <h2 className="text-xl font-semibold">Step 5: Interact &amp; Profile Gas</h2>
           </div>
           <ol className="text-gray-300 space-y-3 list-decimal list-inside">
-            <li className="pl-2">Switch to the <strong>Deployment</strong> tab (▶) — CryptP auto-generates a UI for every ABI function</li>
+            <li className="pl-2">Switch to the <strong>Deployment</strong> tab (▶) — Aethon auto-generates a UI for every ABI function</li>
             <li className="pl-2">Call any read or write function and see emitted events in the live <strong>Event Log</strong></li>
             <li className="pl-2">After each tx, the <strong>Gas Profiler</strong> (🔥 sidebar) shows a line-by-line heatmap of where your gas went</li>
             <li className="pl-2">Optimize expensive lines before going live to save users real money</li>
@@ -233,7 +233,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
             <li className="pl-2">Open <strong>Problem Audit → Confidential</strong> and run the staging CRE audit (local proxy policy today; TEE target when registered). Live deploy is gated on a gateable <strong>ALLOW</strong> when the client-side Settings gate is on</li>
             <li className="pl-2">Click the <strong>Wallet</strong> button in the header to connect MetaMask</li>
             <li className="pl-2">In the <strong>History</strong> tab, click <strong>Promote to Live Network</strong> (or Output → Injected Provider)</li>
-            <li className="pl-2">CryptP uses your MetaMask signer to broadcast the transaction — supports Sepolia, Base, and Ethereum Mainnet</li>
+            <li className="pl-2">Aethon uses your MetaMask signer to broadcast the transaction — supports Sepolia, Base, and Ethereum Mainnet</li>
             <li className="pl-2">Get testnet ETH:
               <ul className="list-disc list-inside pl-5 pt-2">
                 <li><a href="https://sepoliafaucet.com/" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-1">Sepolia Faucet <ExternalLink className="h-3 w-3" /></a></li>
@@ -272,7 +272,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
           <li className="pl-2">Copy your deployed contract address from the History tab</li>
           <li className="pl-2">Go to <a href="https://sepolia.etherscan.io/" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-1">Sepolia Etherscan <ExternalLink className="h-3 w-3" /></a> (or the explorer for your chosen network)</li>
           <li className="pl-2">Search for your contract address → click <strong>Contract</strong> tab → <strong>Verify and Publish</strong></li>
-          <li className="pl-2">Use the compiler version shown in the CryptP Output panel</li>
+          <li className="pl-2">Use the compiler version shown in the Aethon Output panel</li>
           <li className="pl-2">Paste the Solidity source. Verification unlocks the read/write UI on Etherscan for your users</li>
         </ol>
       </div>
@@ -284,12 +284,12 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
           Testing Your Contract
         </h2>
         <div className="space-y-4 text-gray-300">
-          <p>Once deployed, use CryptP's built-in tools to test and monitor your contract:</p>
+          <p>Once deployed, use Aethon's built-in tools to test and monitor your contract:</p>
 
           <div className="grid md:grid-cols-2 gap-4 mt-4">
             <div className="bg-gray-700/50 p-4 rounded-lg">
               <h3 className="font-medium text-blue-400 mb-2 flex items-center gap-2">
-                <Play className="h-4 w-4" /> Using CryptP Interaction Tab
+                <Play className="h-4 w-4" /> Using Aethon Interaction Tab
               </h3>
               <p className="mb-2">After deployment, switch to the <strong>Deployment</strong> tab (▶ icon). You can:</p>
               <ul className="list-disc list-inside mt-2 space-y-1">

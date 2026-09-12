@@ -1,7 +1,7 @@
-# 🚀 CryptP: Strategic Smart Contract IDE Roadmap
+# 🚀 Aethon: Strategic Smart Contract IDE Roadmap
 
 ## 🎯 Vision: The "Remix Killer"
-CryptP is a high-performance, browser-native IDE designed to transcend the complexity of tools like Remix. By combining **Premium UI**, **Native AI Assistance**, and **Invisible Security**, CryptP enables developers to build, audit, and launch protocols with professional precision.
+Aethon is a high-performance, browser-native IDE designed to transcend the complexity of tools like Remix. By combining **Premium UI**, **Native AI Assistance**, and **Invisible Security**, Aethon enables developers to build, audit, and launch protocols with professional precision.
 
 ---
 
@@ -31,7 +31,7 @@ CryptP is a high-performance, browser-native IDE designed to transcend the compl
 
 ### 9.2 Real-World Deployment
 - **Injected Provider Support**: Connect MetaMask to deploy to ANY EVM chain (Sepolia, Base, Mainnet).
-- **Environment Toggle**: Switch effortlessly between "CryptP Sandbox (Local)" and "Injected MetaMask".
+- **Environment Toggle**: Switch effortlessly between "Aethon Sandbox (Local)" and "Injected MetaMask".
 - **Automatic Faucet integration**: Direct links to testnet faucets based on the active network.
 
 ### 9.3 Unified Interaction
@@ -52,7 +52,7 @@ CryptP is a high-performance, browser-native IDE designed to transcend the compl
 *Bridging the gap between the IDE and professional CI/CD pipelines.*
 
 - **Seamless Import/Export**: One-click import of whole repositories directly from GitHub via the GitHub REST API, and exporting workspaces as new repositories.
-- **Bi-Directional Sync**: Connect a local CryptP workspace to a GitHub repo. Pull the latest commits or push local changes directly from the IDE.
+- **Bi-Directional Sync**: Connect a local Aethon workspace to a GitHub repo. Pull the latest commits or push local changes directly from the IDE.
 - **OAuth & Permissions Integration**: Utilize Supabase OAuth tokens to securely manage repository access, allowing users to authenticate once and manage their code effortlessly.
 - **Diff Viewer**: Visual side-by-side comparison of local changes against the `main` branch before committing.
 

@@ -359,7 +359,7 @@ pragma solidity ^0.8.24;
 
 /**
  * @title CounterHook
- * @notice Educational Uniswap v4-style hook for CryptP Continuity (IDE compile → simulate → deploy).
+ * @notice Educational Uniswap v4-style hook for Aethon Continuity (IDE compile → simulate → deploy).
  * @dev Self-contained stubs so browser WASM solc can compile without pulling v4-core.
  *      Production hooks should inherit BaseHook from v4-periphery and CREATE2-mine flag addresses.
  *

@@ -1,7 +1,7 @@
-# Brand — Aethon (CryptP IDE)
+# Brand � Aethon
 
 **Product name:** Aethon  
-**Codename / repo:** CryptP (`Assassin859/cryptp`)  
+**Repo (unchanged):** [Assassin859/cryptp](https://github.com/Assassin859/cryptp)  
 **Tagline:** Browser-native Solidity workbench
 
 ## Assets
@@ -13,15 +13,17 @@
 | [`docs/brand/`](brand/) | Source copies for submission packs |
 | [`docs/screenshots/`](screenshots/) | Product screenshots for Discord / dashboard |
 
-UI component: [`src/components/BrandLogo.tsx`](../src/components/BrandLogo.tsx) → serves `/aethon-logo.png`.
+UI component: [`src/components/BrandLogo.tsx`](../src/components/BrandLogo.tsx) ? serves `/aethon-logo.png`.
 
 ## Naming in UI
 
-- **Login / marketing:** Aethon
-- **IDE chrome:** Aethon with muted “CryptP” subtitle
-- **Docs / repo:** CryptP IDE is fine; lead with Aethon for sponsors and Discord
+- **Login / marketing / IDE chrome:** Aethon
+- **GitHub repository name:** `cryptp` (do not rename)
+- **Deployed Sepolia registry contract:** `CryptPIndexRegistry` (on-chain name kept)
+- **Studio subgraph slug:** `cryptp-sepolia-indexer` (published endpoint kept)
+- **Demo host:** `cryptp-production.up.railway.app` (Railway service hostname)
 
 ## ETHOnline 2026 Continuity
 
 Partners (max 3): **The Graph**, **Chainlink**, **Uniswap Foundation**.  
-Track: Continuity — Extend Open Source.
+Track: Continuity � Extend Open Source.

@@ -1,7 +1,7 @@
-# CryptP platform subgraph (Sepolia)
+# Aethon platform subgraph (Sepolia)
 
 Indexes contracts registered via `CryptPIndexRegistry` using The Graph data-source templates.
-End users never deploy this — they stay in the CryptP IDE.
+End users never deploy this — they stay in the Aethon.
 
 ## Operator setup (once)
 
@@ -32,6 +32,6 @@ VITE_GRAPH_REGISTRY_ADDRESS=0x...
 VITE_GRAPH_ENDPOINT=https://api.studio.thegraph.com/query/<id>/cryptp-sepolia-indexer/version/latest
 ```
 
-## User flow (in CryptP)
+## User flow (in Aethon)
 
 Deploy SimpleStorage on Sepolia → Indexed panel → **Register for indexing** → call `setValue` → **Refresh**.

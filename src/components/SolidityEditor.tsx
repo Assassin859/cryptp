@@ -151,7 +151,7 @@ const SolidityEditor: React.FC<SolidityEditorProps> = ({
                 </div>
              </div>
              <p className="text-xs text-gray-600 font-bold uppercase tracking-wider md:hidden">
-               Open CryptP on desktop to browse workspaces and create contracts.
+               Open Aethon on desktop to browse workspaces and create contracts.
              </p>
         </div>
       </div>

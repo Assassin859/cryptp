@@ -1,6 +1,6 @@
-# 📋 CryptP: Professional Web3 IDE - Master Checklist
+# 📋 Aethon: Professional Web3 IDE - Master Checklist
 
-This checklist documents every core feature, interaction, and capability within the CryptP suite, integrating the latest **Phase 10: Forensic Analytics & Deep Debugging** additions with our core tools.
+This checklist documents every core feature, interaction, and capability within the Aethon suite, integrating the latest **Phase 10: Forensic Analytics & Deep Debugging** additions with our core tools.
 
 ---
 

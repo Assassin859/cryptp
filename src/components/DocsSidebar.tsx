@@ -42,7 +42,7 @@ const DocsSidebar: React.FC = () => {
                  <h2 className="text-xs font-black uppercase tracking-widest text-[#cccccc]">Integrations Guide</h2>
                </div>
                <p className="text-[10px] text-[#858585] leading-relaxed">
-                 The CryptP IDE allows you to bring your own API keys to unlock advanced mainnet deployments and local AI capabilities. Here's a quick guide on how to obtain them.
+                 The Aethon allows you to bring your own API keys to unlock advanced mainnet deployments and local AI capabilities. Here's a quick guide on how to obtain them.
                </p>
             </div>
 

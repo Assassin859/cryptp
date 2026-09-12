@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Github, Chrome, Zap, GitBranch, LayoutGrid, Loader2 } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
+import { lsSet } from '../utils/aethonStorage';
 
 interface LinkIdentityModalProps {
   onClose: () => void;
@@ -29,7 +30,7 @@ const LinkIdentityModal: React.FC<LinkIdentityModalProps> = ({ onClose }) => {
   };
 
   const handleDismiss = () => {
-    localStorage.setItem('cryptp-dismiss-link-modal', 'true');
+    lsSet('dismiss-link-modal', 'true');
     onClose();
   };
 

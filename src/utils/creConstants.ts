@@ -2,7 +2,10 @@
  * Shared CRE Confidential audit gate prefs (mirrors graphConstants).
  * Storage key includes `-keys` so Auth/App idle logout preserves it.
  */
-export const CRE_KEYS_STORAGE = 'cryptp-cre-keys';
+import { lsGet, lsSet } from './aethonStorage';
+
+export const CRE_KEYS_STORAGE = 'aethon-cre-keys';
+export const CRE_PREFS_EVENT = 'aethon-cre-prefs';
 
 export type CreGateMode = 'stub' | 'live';
 
@@ -28,6 +31,7 @@ const DEFAULT_PREFS: CreUserPrefs = {
 
 function notifyCrePrefsChanged(): void {
   try {
+    window.dispatchEvent(new Event(CRE_PREFS_EVENT));
     window.dispatchEvent(new Event('cryptp-cre-prefs'));
   } catch {
     /* ignore */
@@ -36,7 +40,7 @@ function notifyCrePrefsChanged(): void {
 
 export function getCreUserPrefs(): CreUserPrefs {
   try {
-    const raw = localStorage.getItem(CRE_KEYS_STORAGE);
+    const raw = lsGet(CRE_KEYS_STORAGE);
     if (!raw) return { ...DEFAULT_PREFS };
     const parsed = JSON.parse(raw) as Partial<CreUserPrefs>;
     return {
@@ -61,7 +65,7 @@ export function setCreUserPrefs(prefs: Partial<CreUserPrefs>): CreUserPrefs {
     consumerAddress: (prefs.consumerAddress ?? cur.consumerAddress).trim(),
   };
   try {
-    localStorage.setItem(CRE_KEYS_STORAGE, JSON.stringify(next));
+    lsSet(CRE_KEYS_STORAGE, JSON.stringify(next));
   } catch {
     /* ignore */
   }

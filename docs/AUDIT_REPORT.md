@@ -1,4 +1,4 @@
-# CryptP IDE — Deep Audit Report
+# Aethon — Deep Audit Report
 
 **Date:** September 1, 2026  
 **Scope:** Full codebase — logic, security, structure, schema, CI, documentation  
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-CryptP IDE is a functional browser-native Solidity development environment with a live production deployment, passing Playwright smoke tests (31 PASS / 0 FAIL), and a verified Sepolia testnet deployment. Despite that, the audit identified **50+ issues** across sandbox rehydration, state management, compiler security, token generation, schema drift, and documentation accuracy.
+Aethon is a functional browser-native Solidity development environment with a live production deployment, passing Playwright smoke tests (31 PASS / 0 FAIL), and a verified Sepolia testnet deployment. Despite that, the audit identified **50+ issues** across sandbox rehydration, state management, compiler security, token generation, schema drift, and documentation accuracy.
 
 | Severity | Count (approx.) |
 |----------|-----------------|

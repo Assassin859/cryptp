@@ -1,8 +1,8 @@
-# Contributing to Aethon (CryptP IDE)
+# Contributing to Aethon
 
 Thank you for your interest in contributing! We welcome contributions from developers of all skill levels. This guide will help you get started.
 
-**Product name:** Aethon · **Repo:** CryptP — see [docs/BRAND.md](docs/BRAND.md).
+**Product name:** Aethon · **Repo:** Assassin859/cryptp — see [docs/BRAND.md](docs/BRAND.md).
 
 ## Code of Conduct
 
@@ -463,5 +463,5 @@ Contributors will be recognized in:
 
 ---
 
-**Thank you for contributing to CryptP!** 🎉
+**Thank you for contributing to Aethon!** 🎉
 

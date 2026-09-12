@@ -22,7 +22,7 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [newRepoName, setNewRepoName] = useState('');
   
-  const [commitMessage, setCommitMessage] = useState('Update contracts via CryptP IDE');
+  const [commitMessage, setCommitMessage] = useState('Update contracts via Aethon');
   const [selectedSyncFiles, setSelectedSyncFiles] = useState<Record<string, boolean>>({});
   const [localFiles, setLocalFiles] = useState<ContractFile[]>([]);
 
@@ -75,14 +75,14 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
 
     try {
       // 1. Create Repo on GitHub
-      const repo = await createRepository(newRepoName, `Exported from CryptP IDE: ${currentProject.name}`);
+      const repo = await createRepository(newRepoName, `Exported from Aethon: ${currentProject.name}`);
       
       // 2. Fetch local files
       const files = await getFiles(currentProject.id);
 
       // 3. Push files to new repo (sequentially for simplicity, GitHub API rate limits parallel PUTs sometimes)
       for (const file of files) {
-        await pushFileToRepo(repo.full_name, file.name, file.content || '', 'Initial commit from CryptP');
+        await pushFileToRepo(repo.full_name, file.name, file.content || '', 'Initial commit from Aethon');
       }
 
       // 4. Update the Project in Supabase
@@ -135,7 +135,7 @@ export function GitHubSyncModal({ isOpen, onClose, userId, currentProject, onWor
               currentProject.github_repo, 
               file.name, 
               file.content || '', 
-              commitMessage || `Update ${file.name} via CryptP`,
+              commitMessage || `Update ${file.name} via Aethon`,
               currentProject.github_branch || 'main',
               sha
           );

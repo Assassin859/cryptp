@@ -1,4 +1,4 @@
-# Installation Guide — Aethon (CryptP IDE)
+# Installation Guide — Aethon
 
 Browser-native Solidity workbench. Brand assets live in `public/` (`aethon-logo.png`, `aethon-cover.png`). See [docs/BRAND.md](BRAND.md).
 
@@ -57,7 +57,7 @@ npm list
 
 ### 4. Configure Environment
 
-CryptP requires a Supabase project for authentication and cloud workspaces.
+Aethon requires a Supabase project for authentication and cloud workspaces.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. In the dashboard: **Settings → API**, copy the **Project URL** and **anon public** key.
@@ -101,7 +101,7 @@ npm run dev
 ## GitHub sync (optional)
 
 1. In Supabase: **Authentication → Providers → GitHub** — enable the provider.
-2. Sign in to CryptP with GitHub so `provider_token` is available for API calls.
+2. Sign in to Aethon with GitHub so `provider_token` is available for API calls.
 3. If sync fails, log out and sign in again to refresh the token.
 
 ## Security notes

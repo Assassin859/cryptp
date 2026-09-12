@@ -52,7 +52,7 @@ export function writeReport(): void {
   const defects = results.filter((r) => r.status === 'FAIL');
   const blocked = results.filter((r) => r.status === 'BLOCKED');
 
-  const md = `# CryptP IDE Smoke Test Report
+  const md = `# Aethon Smoke Test Report
 
 **Date:** ${new Date().toISOString().slice(0, 10)}  
 **Environment:** local dev (\`npm run dev\`)  

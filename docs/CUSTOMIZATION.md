@@ -6,7 +6,7 @@ This guide shows you how to customize your ERC-20 token by modifying the smart c
 
 ## Performance note
 
-The CryptP IDE production bundle is large (~2.5MB minified) because it includes the in-browser EVM and compiler stack. For faster first load, consider lazy-loading heavy panels (Analytics, AI) in a future release.
+The Aethon production bundle is large (~2.5MB minified) because it includes the in-browser EVM and compiler stack. For faster first load, consider lazy-loading heavy panels (Analytics, AI) in a future release.
 
 ## Customization Options
 

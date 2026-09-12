@@ -1,6 +1,6 @@
-# 📋 CryptP Manual QA Guide (Out-of-Scope Automation Gaps)
+# 📋 Aethon  Manual QA Guide (Out-of-Scope Automation Gaps)
 
-This document provides step-by-step instructions for manually verifying the features of the CryptP IDE that cannot be automatically tested in a headless CI environment due to third-party integrations (MetaMask, GitHub OAuth, real AI API keys) or browser file dialog constraints.
+This document provides step-by-step instructions for manually verifying the features of the Aethon that cannot be automatically tested in a headless CI environment due to third-party integrations (MetaMask, GitHub OAuth, real AI API keys) or browser file dialog constraints.
 
 ---
 
@@ -12,15 +12,15 @@ Since headless Playwright Chrome instances do not have the MetaMask extension in
 1. Click the **Wallet Connect** button (usually located in the bottom bar or Settings).
 2. Verify the MetaMask browser extension pops up and requests connection permission.
 3. Approve the connection.
-4. Verify your wallet address (e.g., `0x...`) is displayed correctly in the CryptP interface.
+4. Verify your wallet address (e.g., `0x...`) is displayed correctly in the Aethon  interface.
 
 ### I2: Network Switch
 1. Change the network dropdown in MetaMask (e.g., from Ethereum Mainnet to Sepolia Testnet or Localhost).
-2. Verify that the network status indicator in the CryptP IDE updates dynamically to match the newly selected network.
+2. Verify that the network status indicator in the Aethon updates dynamically to match the newly selected network.
 
 ### I3: MetaMask Deploy
 1. Compile a valid contract (e.g., `SmokeStorage.sol`).
-2. Switch the target network in CryptP to **Sepolia** or another live testnet.
+2. Switch the target network in Aethon  to **Sepolia** or another live testnet.
 3. Click **Deploy via MetaMask**.
 4. Verify the MetaMask popup asks to confirm the transaction with gas estimation.
 5. Confirm the transaction.
@@ -40,7 +40,7 @@ Because automated tests cannot walk through the full multi-factor OAuth authoriz
 
 ### J2: Import Repository
 1. Click the **GitHub Sync** button in the header.
-2. If not logged in, click **Connect GitHub** and follow the browser redirection to authorize the CryptP application on GitHub.
+2. If not logged in, click **Connect GitHub** and follow the browser redirection to authorize the Aethon  application on GitHub.
 3. Once redirected back, select **Import Repository**.
 4. Choose a repository and branch from the list.
 5. Verify the files are pulled down and populate a new workspace in the file explorer.

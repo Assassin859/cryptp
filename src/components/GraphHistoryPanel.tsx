@@ -15,6 +15,7 @@ import {
   setCustomGraphEndpoint,
   setCustomGraphRegistryAddress,
   setGraphSourceMode,
+  GRAPH_PREFS_EVENT,
   type GraphSourceMode,
 } from '../utils/graphConstants';
 import {
@@ -85,8 +86,12 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
 
   useEffect(() => {
     const onPrefs = () => setConfigTick((t) => t + 1);
+    window.addEventListener(GRAPH_PREFS_EVENT, onPrefs);
     window.addEventListener('cryptp-graph-prefs', onPrefs);
-    return () => window.removeEventListener('cryptp-graph-prefs', onPrefs);
+    return () => {
+      window.removeEventListener(GRAPH_PREFS_EVENT, onPrefs);
+      window.removeEventListener('cryptp-graph-prefs', onPrefs);
+    };
   }, []);
 
   const applyMode = (next: GraphSourceMode) => {
@@ -143,7 +148,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
 
   const handleRegister = async () => {
     if (!address || !registryAddress) {
-      setError('Registry address required. Paste it under Use my Graph Studio, or use CryptP platform.');
+      setError('Registry address required. Paste it under Use my Graph Studio, or use Aethon platform.');
       setShowStudioSettings(true);
       return;
     }
@@ -203,7 +208,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
             mode === 'platform' ? 'bg-[#007acc] text-white' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
-          CryptP platform
+          Aethon platform
         </button>
         <button
           type="button"
@@ -265,7 +270,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
           <span className="font-bold uppercase tracking-widest text-[10px]">No subgraph connected</span>
         </div>
         <p>
-          CryptP platform endpoint is not set yet. Switch to <strong className="text-gray-300">My Graph Studio</strong>{' '}
+          Aethon platform endpoint is not set yet. Switch to <strong className="text-gray-300">My Graph Studio</strong>{' '}
           and paste your query URL, or wait for the operator to set{' '}
           <code className="text-gray-300">VITE_GRAPH_ENDPOINT</code>.
         </p>
@@ -327,7 +332,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
           <p className="font-mono text-[11px] text-gray-200 break-all">{address}</p>
           <p className="text-[10px] text-gray-600 mt-1">
             {network}
-            {mode === 'studio' ? ' · custom Studio' : ' · CryptP platform'}
+            {mode === 'studio' ? ' · custom Studio' : ' · Aethon platform'}
           </p>
         </div>
 

@@ -37,7 +37,7 @@ This guide walks you through deploying your ERC-20 token on an Ethereum testnet.
 1. Look at the left sidebar, find "FILE EXPLORER"
 2. Right-click in the empty space below any existing files
 3. Select "New Folder"
-4. Name it `CryptP`
+4. Name it `Aethon`
 5. Right-click on the folder
 6. Select "New File"
 
@@ -299,7 +299,7 @@ Once connected to your testnet, visit a faucet to get free test ETH:
 - Refresh MetaMask
 - Try removing and re-adding token
 
-## CryptP IDE persistence (Supabase + sandbox rehydration)
+## Aethon persistence (Supabase + sandbox rehydration)
 
 The in-browser IDE stores durable artifacts in Supabase and rebuilds the local EVM on load:
 

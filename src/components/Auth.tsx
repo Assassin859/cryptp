@@ -3,6 +3,7 @@ import { supabase } from '../utils/supabaseClient';
 import { getErrorMessage } from '../utils/errorMessage';
 import { Zap, Shield, Flame, Cpu, Layers, Twitter } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { lsSet, isPreservedStorageKey } from '../utils/aethonStorage';
 
 interface AuthProps {
   onSignedIn: (userId: string) => void;
@@ -75,7 +76,7 @@ const Auth: React.FC<AuthProps> = ({ onSignedIn }) => {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         if (typeof window !== 'undefined') {
-          window.localStorage.setItem('cryptp-new-user', 'true');
+          lsSet('new-user', 'true');
         }
         setAuthError('Check your email for the confirmation link!');
       } else {
@@ -106,11 +107,11 @@ const Auth: React.FC<AuthProps> = ({ onSignedIn }) => {
     setLoading(true);
     await supabase.auth.signOut();
     if (typeof window !== 'undefined') {
-      // Preserve *-keys* (AI/RPC + cryptp-graph-keys Studio prefs)
+      // Preserve *-keys* (AI/RPC + Graph/CRE prefs) under aethon-* and legacy cryptp-*
       Object.keys(window.localStorage)
         .filter(k =>
-          k.startsWith('cryptp-') &&
-          !k.includes('-keys') &&
+          (k.startsWith('aethon-') || k.startsWith('cryptp-')) &&
+          !isPreservedStorageKey(k) &&
           !k.includes('new-user') &&
           !k.includes('dismiss-link-modal')
         )

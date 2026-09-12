@@ -1,5 +1,5 @@
 /**
- * CryptP Browser Compiler WebWorker
+ * Aethon Browser Compiler WebWorker
  * Handles Solc-WASM compilation in a background thread to prevent UI freezing.
  * Bypasses NPM solc to dynamically load lightweight WASM binary natively.
  */

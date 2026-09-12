@@ -39,7 +39,7 @@ async function querySubgraph<T>(
   const endpoint = getGraphEndpoint();
   if (!endpoint) {
     throw new GraphClientError(
-      'The Graph endpoint is not configured. Use CryptP platform env or Indexed → My Graph Studio.',
+      'The Graph endpoint is not configured. Use Aethon platform env or Indexed → My Graph Studio.',
       'missing_endpoint'
     );
   }

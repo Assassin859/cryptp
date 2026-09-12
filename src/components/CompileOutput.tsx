@@ -346,7 +346,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
                   onChange={(e) => setExecutionEnv(e.target.value as 'sandbox' | 'injected')}
                   className="w-full bg-[#252526] border border-[#333] hover:border-[#007acc] text-[11px] font-bold text-[#cccccc] px-3 py-2.5 rounded appearance-none transition-all cursor-pointer outline-none shadow-inner"
                 >
-                  <option value="sandbox">CryptP Sandbox (Browser VM)</option>
+                  <option value="sandbox">Aethon Sandbox (Browser VM)</option>
                   <option value="injected">Injected Provider (MetaMask)</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-3 text-gray-500 pointer-events-none" />

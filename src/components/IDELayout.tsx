@@ -68,6 +68,7 @@ import { abiLooksLikeSimpleStorage, setGraphUserPrefs } from '../utils/graphCons
 import InputModal from './InputModal';
 import AethonTerminal from './AethonTerminal';
 import { BrandLogo } from './BrandLogo';
+import { lsGet, sessionGet, sessionSet } from '../utils/aethonStorage';
 
 const AIChat = React.lazy(() => import('./AIChat'));
 const AnalyticsSidebar = React.lazy(() => import('./AnalyticsSidebar'));
@@ -250,7 +251,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
 
           const identities = userData.user.identities || [];
           const hasGithubOrGoogle = identities.some(i => i.provider === 'github' || i.provider === 'google');
-          const hasDismissed = localStorage.getItem('cryptp-dismiss-link-modal');
+          const hasDismissed = lsGet('dismiss-link-modal');
           if (!hasGithubOrGoogle && !hasDismissed) {
              setShowLinkIdentityModal(true);
           }
@@ -287,8 +288,16 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           const { data: settingsData, error } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
           if (settingsData && !error) {
             // Cloud-to-Scoped-Storage Sync
-            const scopedAiKey = `cryptp-ai-keys-${userId}`;
-            const scopedRpcKey = `cryptp-rpc-keys-${userId}`;
+            const scopedAiKey = `aethon-ai-keys-${userId}`;
+            const scopedRpcKey = `aethon-rpc-keys-${userId}`;
+            const legacyAi = `cryptp-ai-keys-${userId}`;
+            const legacyRpc = `cryptp-rpc-keys-${userId}`;
+            if (!localStorage.getItem(scopedAiKey) && localStorage.getItem(legacyAi)) {
+              localStorage.setItem(scopedAiKey, localStorage.getItem(legacyAi)!);
+            }
+            if (!localStorage.getItem(scopedRpcKey) && localStorage.getItem(legacyRpc)) {
+              localStorage.setItem(scopedRpcKey, localStorage.getItem(legacyRpc)!);
+            }
             if (settingsData.ai_keys) localStorage.setItem(scopedAiKey, JSON.stringify(settingsData.ai_keys));
             if (settingsData.rpc_keys) localStorage.setItem(scopedRpcKey, JSON.stringify(settingsData.rpc_keys));
             const gp = settingsData.graph_prefs as {
@@ -875,7 +884,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       setConfirmModal({
         title: 'Index with The Graph?',
         message:
-          'Register this Sepolia contract so CryptP can index ValueChanged events. Default: CryptP platform subgraph. Optional: use your own Graph Studio URL under Indexed or Settings.',
+          'Register this Sepolia contract so Aethon can index ValueChanged events. Default: Aethon platform subgraph. Optional: use your own Graph Studio URL under Indexed or Settings.',
         confirmLabel: 'Open Indexed',
         isDangerous: false,
         onConfirm: () => {
@@ -1683,7 +1692,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   // Desktop notice dismiss state
   const [showDesktopNotice, setShowDesktopNotice] = useState(() => {
     if (typeof window !== 'undefined') {
-      return !sessionStorage.getItem('cryptp-dismiss-desktop-notice');
+      return !sessionGet('dismiss-desktop-notice');
     }
     return true;
   });
@@ -1691,7 +1700,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   const dismissDesktopNotice = () => {
     setShowDesktopNotice(false);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('cryptp-dismiss-desktop-notice', 'true');
+      sessionSet('dismiss-desktop-notice', 'true');
     }
   };
 
@@ -1727,11 +1736,10 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       {/* 🚀 Header */}
       <header className="h-10 border-b border-white/5 bg-[#1a1a1c]/80 backdrop-blur-xl flex items-center px-4 max-md:px-2 justify-between shrink-0 select-none z-[60] shadow-sm">
         <div className="flex items-center gap-4 max-md:gap-2">
-           <div className="flex items-center gap-2.5 group cursor-pointer" title="Aethon · CryptP IDE">
+           <div className="flex items-center gap-2.5 group cursor-pointer" title="Aethon">
               <BrandLogo size={20} className="group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/20" />
               <span className="text-[12px] font-black tracking-[-0.05em] text-white uppercase italic">
                 Aethon
-                <span className="opacity-30 font-light ml-1.5 lowercase tracking-normal max-md:hidden not-italic">CryptP</span>
               </span>
            </div>
            <div className="h-4 w-px bg-white/5 mx-1 max-md:hidden"></div>
@@ -1777,7 +1785,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
           <div className="flex items-center gap-2">
             <Info className="size-4 text-blue-400 shrink-0" />
             <span className="text-[10px] text-blue-200 font-medium leading-tight">
-              CryptP is built for desktop. Open on a laptop for the full IDE experience.
+              Aethon is built for desktop. Open on a laptop for the full IDE experience.
             </span>
           </div>
           <button 
@@ -1942,7 +1950,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                     <BrandLogo size={32} className="rounded-xl shadow-lg shadow-blue-500/20" />
                     <div>
                       <h2 className="text-[15px] font-black text-white tracking-tight">Welcome to Aethon</h2>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">CryptP IDE · open or create a file to start</p>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Open or create a file to start</p>
                     </div>
                   </div>
                   <DeploymentGuide isSidebar={true} />

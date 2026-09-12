@@ -1,8 +1,9 @@
 /**
- * Shared constants for CryptP ↔ The Graph indexing (SimpleStorage kind).
- * User Studio prefs live in localStorage key `cryptp-graph-keys` (survives logout).
+ * Shared constants for Aethon ↔ The Graph indexing (SimpleStorage kind).
+ * User Studio prefs: `aethon-graph-keys` (legacy `cryptp-graph-keys` still read).
  */
 import { id } from 'ethers';
+import { lsGet, lsSet, lsRemove } from './aethonStorage';
 
 /** keccak256("SimpleStorage") — matches CryptPIndexRegistry.KIND_SIMPLE_STORAGE */
 export const KIND_SIMPLE_STORAGE = id('SimpleStorage');
@@ -14,8 +15,9 @@ export const REGISTRY_ABI = [
   'event ContractRegistered(address indexed contractAddress, address indexed registrant, bytes32 indexed kind)',
 ] as const;
 
-/** Logout-safe blob (matches Auth/App `includes('-keys')` preserve rule). */
-export const GRAPH_KEYS_STORAGE = 'cryptp-graph-keys';
+/** Logout-safe blob (matches Auth/App preserve rule for *-keys*). */
+export const GRAPH_KEYS_STORAGE = 'aethon-graph-keys';
+export const GRAPH_PREFS_EVENT = 'aethon-graph-prefs';
 
 const LEGACY_MODE = 'cryptp-graph-mode';
 const LEGACY_ENDPOINT = 'cryptp-graph-endpoint';
@@ -37,7 +39,8 @@ const DEFAULT_PREFS: GraphUserPrefs = {
 
 function notifyGraphPrefsChanged(): void {
   try {
-    window.dispatchEvent(new Event('cryptp-graph-prefs'));
+    window.dispatchEvent(new Event(GRAPH_PREFS_EVENT));
+    window.dispatchEvent(new Event('cryptp-graph-prefs')); // legacy listeners
   } catch {
     /* ignore */
   }
@@ -55,7 +58,7 @@ function migrateLegacyPrefs(): GraphUserPrefs | null {
       endpoint,
       registry,
     };
-    localStorage.setItem(GRAPH_KEYS_STORAGE, JSON.stringify(prefs));
+    lsSet(GRAPH_KEYS_STORAGE, JSON.stringify(prefs));
     localStorage.removeItem(LEGACY_MODE);
     localStorage.removeItem(LEGACY_ENDPOINT);
     localStorage.removeItem(LEGACY_REGISTRY);
@@ -67,7 +70,7 @@ function migrateLegacyPrefs(): GraphUserPrefs | null {
 
 export function getGraphUserPrefs(): GraphUserPrefs {
   try {
-    const raw = localStorage.getItem(GRAPH_KEYS_STORAGE);
+    const raw = lsGet(GRAPH_KEYS_STORAGE);
     if (!raw) {
       const migrated = migrateLegacyPrefs();
       return migrated ?? { ...DEFAULT_PREFS };
@@ -94,12 +97,17 @@ export function setGraphUserPrefs(prefs: Partial<GraphUserPrefs>): GraphUserPref
       : getGraphUserPrefs().mode,
   };
   try {
-    localStorage.setItem(GRAPH_KEYS_STORAGE, JSON.stringify(next));
+    lsSet(GRAPH_KEYS_STORAGE, JSON.stringify(next));
   } catch {
     /* ignore */
   }
   notifyGraphPrefsChanged();
   return next;
+}
+
+export function clearGraphUserPrefsStorage(): void {
+  lsRemove(GRAPH_KEYS_STORAGE);
+  notifyGraphPrefsChanged();
 }
 
 export function getGraphSourceMode(): GraphSourceMode {

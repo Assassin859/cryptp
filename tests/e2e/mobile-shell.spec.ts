@@ -38,7 +38,7 @@ async function loginAndWait(page: import('@playwright/test').Page) {
 }
 
 // ─── Suite 1: Mobile shell DOM hardening ────────────────────────────────────
-test.describe('CryptP Mobile-Safe Shell DOM test', () => {
+test.describe('Aethon Mobile -Safe Shell DOM test', () => {
   test.use({ viewport: { width: 375, height: 667 } });
 
   test('no horizontal scroll and mobile styles are active', async ({ page }) => {
@@ -75,7 +75,7 @@ test.describe('CryptP Mobile-Safe Shell DOM test', () => {
     }
 
     // 6. Verify desktop notice banner is visible
-    const desktopNotice = page.getByText(/CryptP is built for desktop/i);
+    const desktopNotice = page.getByText(/Aethon is built for desktop/i);
     await expect(desktopNotice).toBeVisible();
 
     console.log('✅ Mobile Shell DOM test successfully passed!');
@@ -83,7 +83,7 @@ test.describe('CryptP Mobile-Safe Shell DOM test', () => {
 });
 
 // ─── Suite 2: Bootstrap regression (returning users) ────────────────────────
-test.describe('CryptP Bootstrap regression', () => {
+test.describe('Aethon Bootstrap regression', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
   test('reload does not duplicate simulations or trigger re-deploy', async ({ page }) => {
