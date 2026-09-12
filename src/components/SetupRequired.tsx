@@ -1,15 +1,14 @@
 import React from 'react';
-import { Settings, FileCode } from 'lucide-react';
+import { FileCode } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 const SetupRequired: React.FC = () => (
   <div className="min-h-screen flex items-center justify-center bg-[#1e1e1e] text-[#cccccc] p-6">
     <div className="max-w-lg w-full space-y-6 border border-[#333] rounded-lg bg-[#252526] p-8 shadow-xl">
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded bg-blue-500/10 border border-blue-500/30">
-          <Settings className="size-6 text-blue-400" />
-        </div>
+        <BrandLogo size={40} className="rounded-lg border border-blue-500/30" />
         <div>
-          <h1 className="text-lg font-bold text-white">CryptP setup required</h1>
+          <h1 className="text-lg font-bold text-white">Aethon setup required</h1>
           <p className="text-xs text-gray-400">Supabase environment variables are missing</p>
         </div>
       </div>

@@ -67,16 +67,17 @@ CryptP is a high-performance, browser-native IDE designed to transcend the compl
 
 ---
 
-## 🚀 Phase 13: DeFi & Oracle Continuity (IN PROGRESS)
+## ✅ Phase 13: DeFi & Oracle Continuity (COMPLETED — ETHOnline 2026)
 
-*ETHOnline Continuity — Chainlink first, then Uniswap.*
+*Continuity partners: The Graph → Chainlink → Uniswap.*
 
-- **Chainlink CRE Confidential Audit Gate**: Pre-live-deploy staging gate via local proprietary policy (`cre-proxy` / `cre/aethon-audit-firewall`); TEE/`handlerInTee` target when CRE registered. IDE Problem Audit → Confidential, MetaMask gate, `AuditFirewallConsumer` on Sepolia. See [docs/CHAINLINK.md](CHAINLINK.md).
-- **Chainlink Price Feeds**: Onchain `EthUsdConsumer` [`0x22c9F5385b2F01635e8cA36A8b2E5BeE9b00389b`](https://sepolia.etherscan.io/address/0x22c9F5385b2F01635e8cA36A8b2E5BeE9b00389b) + Analytics Market Cost uses Chainlink ETH/USD (CoinGecko fallback). See [docs/CHAINLINK.md](CHAINLINK.md) § Price Feeds (A).
-- **Uniswap v4 hook lab**: Educational `CounterHook` CREATE2-mined on Sepolia [`0xC1FEA93ccD6A5B0F0B116E18Ba299198EAA040c0`](https://sepolia.etherscan.io/address/0xC1FEA93ccD6A5B0F0B116E18Ba299198EAA040c0). See [docs/UNISWAP.md](UNISWAP.md) and [FEEDBACK.md](../FEEDBACK.md).
-- **DeFi Library Manager**: One-click import of Aave / Uniswap interfaces (expand from CounterHook template).
-- **Oracle Simulation**: Feed mock prices into the local EVM to test liquidation logic (after Feeds).
-- **Flash-Loan Simulator**: Test complex multi-hop transactions within the CryptP Sandbox.
+- ✅ **The Graph Indexed**: Platform Sepolia subgraph + Indexed panel; Confidential audit context from live `ValueChanged` history. See [docs/THE_GRAPH.md](THE_GRAPH.md).
+- ✅ **Chainlink CRE Confidential Audit Gate**: Pre-live-deploy staging gate (`cre-proxy` / `cre/aethon-audit-firewall`); TEE/`handlerInTee` target when CRE registered. `AuditFirewallConsumer` on Sepolia. See [docs/CHAINLINK.md](CHAINLINK.md).
+- ✅ **Chainlink Price Feeds**: Onchain `EthUsdConsumer` [`0x22c9F5385b2F01635e8cA36A8b2E5BeE9b00389b`](https://sepolia.etherscan.io/address/0x22c9F5385b2F01635e8cA36A8b2E5BeE9b00389b) + Analytics Market Cost. See [docs/CHAINLINK.md](CHAINLINK.md) § Price Feeds (A).
+- ✅ **Uniswap v4 hook lab**: Educational `CounterHook` CREATE2-mined on Sepolia [`0xC1FEA93ccD6A5B0F0B116E18Ba299198EAA040c0`](https://sepolia.etherscan.io/address/0xC1FEA93ccD6A5B0F0B116E18Ba299198EAA040c0). See [docs/UNISWAP.md](UNISWAP.md) and [FEEDBACK.md](../FEEDBACK.md).
+- ✅ **Brand kit**: Aethon logo/cover in `public/` + [docs/BRAND.md](BRAND.md); screenshots in [docs/screenshots/](screenshots/).
+- ⬜ **DeFi Library Manager**: One-click Aave / Uniswap interfaces (post-hackathon).
+- ⬜ **Oracle Simulation / Flash-Loan Simulator**: Post-hackathon sandbox expansions.
 
 ---
 

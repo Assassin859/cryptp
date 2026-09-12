@@ -84,5 +84,20 @@ This checklist documents every core feature, interaction, and capability within 
 
 ---
 
+## 🌐 8. ETHOnline 2026 Continuity Partners
+- [x] **The Graph — Indexed**
+    - **Interaction**: Register Sepolia contract → `setValue` → Refresh Indexed for `ValueChanged`. Confidential loads Graph context.
+    - **Docs**: [docs/THE_GRAPH.md](docs/THE_GRAPH.md)
+- [x] **Chainlink — CRE + Price Feeds**
+    - **Interaction**: Problem Audit → Confidential → Run staging / CRE audit; Analytics settle ETH/USD on Sepolia.
+    - **Docs**: [docs/CHAINLINK.md](docs/CHAINLINK.md)
+- [x] **Uniswap — v4 CounterHook**
+    - **Interaction**: Token Factory → Uniswap Continuity → compile → sandbox / CREATE2 Sepolia deploy.
+    - **Docs**: [docs/UNISWAP.md](docs/UNISWAP.md) · [FEEDBACK.md](FEEDBACK.md)
+- [x] **Brand assets**
+    - Logo/cover in `public/`; UI via `BrandLogo`; see [docs/BRAND.md](docs/BRAND.md)
+
+---
+
 > [!TIP]
 > **Recommended Bug-Bounty Testing Flow**: Write a gas-inefficient contract -> Check the **Security Radar** and **Storage Slot Map** on the Left Sidebar -> Fix packed slots -> Deploy to Sandbox -> Execute -> Check the **Gas Profiler** on the Right Sidebar for line-by-line tracing.

@@ -1,6 +1,6 @@
-# Uniswap × CryptP (v4 hook Continuity)
+# Uniswap × Aethon (CryptP IDE — v4 hook Continuity)
 
-Continuity upgrade: CryptP’s existing **edit → compile → sandbox → Sepolia** loop gains a **Uniswap v4-style hook** authoring path. No new activity-bar icon.
+Continuity upgrade: Aethon’s existing **edit → compile → sandbox → Sepolia** loop gains a **Uniswap v4-style hook** authoring path. No new activity-bar icon.
 
 ## Quick start (in the IDE)
 

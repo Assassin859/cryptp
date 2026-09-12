@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { getErrorMessage } from '../utils/errorMessage';
 import { Zap, Shield, Flame, Cpu, Layers, Twitter } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 interface AuthProps {
   onSignedIn: (userId: string) => void;
@@ -208,9 +209,7 @@ const Auth: React.FC<AuthProps> = ({ onSignedIn }) => {
                 {/* Card header */}
                 <div className="mb-8 text-center">
                   <div className="inline-flex items-center justify-center gap-2.5 mb-3">
-                    <div className="size-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                      <Zap className="size-4 text-white" />
-                    </div>
+                    <BrandLogo size={32} className="shadow-lg shadow-indigo-500/30" />
                     <span className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 uppercase tracking-tighter">
                       Aethon
                     </span>

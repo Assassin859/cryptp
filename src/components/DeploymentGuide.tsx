@@ -10,7 +10,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
       <div className="flex flex-col gap-4 font-sans text-xs text-[#cccccc]">
         <div>
           <h3 className="text-sm font-black text-white uppercase tracking-wider mb-1">
-            Deploy with CryptP
+            Deploy with Aethon
           </h3>
           <p className="text-[10px] text-gray-500 leading-relaxed">
             From first line of Solidity to a live on-chain contract — entirely inside this browser.
@@ -132,7 +132,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6 md:p-8">
       <header className="mb-8">
         <h1 className="text-3xl md:text-4xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-400">
-          Deploy Smart Contracts with CryptP
+          Deploy Smart Contracts with Aethon
         </h1>
         <p className="text-lg text-gray-300 max-w-3xl">
           From first line of Solidity to a live on-chain contract — entirely inside your browser.

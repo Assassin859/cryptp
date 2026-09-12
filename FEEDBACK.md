@@ -2,7 +2,7 @@
 
 ETHOnline 2026 Continuity · Uniswap Foundation stack contribution.
 
-**Project:** [Assassin859/cryptp](https://github.com/Assassin859/cryptp) — browser Solidity IDE upgraded with a Uniswap **v4 hook authoring path** (template → WASM compile → sandbox → Sepolia deploy).
+**Project:** [Assassin859/cryptp](https://github.com/Assassin859/cryptp) — **Aethon** browser Solidity IDE upgraded with a Uniswap **v4 hook authoring path** (template → WASM compile → sandbox → Sepolia deploy).
 
 **Feedback form:** submit this file’s raw URL via [Uniswap Developer Feedback Form](https://developers.uniswap.org/hackathon-feedback).
 

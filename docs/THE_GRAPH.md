@@ -1,6 +1,6 @@
-# The Graph × CryptP
+# The Graph × Aethon (CryptP IDE)
 
-CryptP uses a **platform-managed** Sepolia subgraph so users index and query contract history **inside the IDE**. **Supabase remains the app database** (workspaces, files, compilations, deployments, gas profiles, settings).
+Aethon uses a **platform-managed** Sepolia subgraph so users index and query contract history **inside the IDE**. **Supabase remains the app database** (workspaces, files, compilations, deployments, gas profiles, settings).
 
 ## Database boundary (important)
 

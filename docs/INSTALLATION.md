@@ -1,4 +1,6 @@
-# Installation Guide
+# Installation Guide — Aethon (CryptP IDE)
+
+Browser-native Solidity workbench. Brand assets live in `public/` (`aethon-logo.png`, `aethon-cover.png`). See [docs/BRAND.md](BRAND.md).
 
 ## Prerequisites
 

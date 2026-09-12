@@ -7,7 +7,6 @@ import {
   Check,
   ChevronLeft,
   Terminal,
-  Code2,
   BookOpen,
   FolderTree,
   Search,
@@ -68,6 +67,7 @@ import GraphHistoryPanel from './GraphHistoryPanel';
 import { abiLooksLikeSimpleStorage, setGraphUserPrefs } from '../utils/graphConstants';
 import InputModal from './InputModal';
 import AethonTerminal from './AethonTerminal';
+import { BrandLogo } from './BrandLogo';
 
 const AIChat = React.lazy(() => import('./AIChat'));
 const AnalyticsSidebar = React.lazy(() => import('./AnalyticsSidebar'));
@@ -1727,11 +1727,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       {/* 🚀 Header */}
       <header className="h-10 border-b border-white/5 bg-[#1a1a1c]/80 backdrop-blur-xl flex items-center px-4 max-md:px-2 justify-between shrink-0 select-none z-[60] shadow-sm">
         <div className="flex items-center gap-4 max-md:gap-2">
-           <div className="flex items-center gap-2.5 group cursor-pointer">
-              <div className="bg-[#007acc] size-5 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform">
-                <Code2 className="size-3 text-white" />
-              </div>
-              <span className="text-[12px] font-black tracking-[-0.05em] text-white uppercase italic">Crypt<span className="text-[#007acc]">P</span> <span className="opacity-30 font-light ml-1 lowercase tracking-normal max-md:hidden">lab</span></span>
+           <div className="flex items-center gap-2.5 group cursor-pointer" title="Aethon · CryptP IDE">
+              <BrandLogo size={20} className="group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/20" />
+              <span className="text-[12px] font-black tracking-[-0.05em] text-white uppercase italic">
+                Aethon
+                <span className="opacity-30 font-light ml-1.5 lowercase tracking-normal max-md:hidden not-italic">CryptP</span>
+              </span>
            </div>
            <div className="h-4 w-px bg-white/5 mx-1 max-md:hidden"></div>
            <div className="flex items-center gap-2 group max-md:hidden">
@@ -1938,12 +1939,10 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
               <div className="h-full overflow-y-auto custom-scrollbar flex flex-col items-center justify-start bg-[#1e1e1e] p-8 gap-6">
                 <div className="w-full max-w-lg">
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="bg-[#007acc] size-8 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                      <svg className="size-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                    </div>
+                    <BrandLogo size={32} className="rounded-xl shadow-lg shadow-blue-500/20" />
                     <div>
-                      <h2 className="text-[15px] font-black text-white tracking-tight">Welcome to CryptP</h2>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Open or create a file to start editing</p>
+                      <h2 className="text-[15px] font-black text-white tracking-tight">Welcome to Aethon</h2>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">CryptP IDE · open or create a file to start</p>
                     </div>
                   </div>
                   <DeploymentGuide isSidebar={true} />
