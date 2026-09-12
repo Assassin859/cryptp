@@ -18,7 +18,11 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    "paths": {
+      "@cre/ide-reconcile": ["./cre/shared/ideReconcile.mjs"]
+    }
   },
   "include": ["src"]
 }

@@ -13,6 +13,13 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["main.ts", "workflow.ts", "src/policy.ts", "src/deployPolicy.ts", "src/workflow.ts"],
+  "include": [
+    "main.ts",
+    "workflow.ts",
+    "src/policy.ts",
+    "src/deployPolicy.ts",
+    "src/deployPolicy.types.ts",
+    "src/workflow.ts"
+  ],
   "exclude": ["src/**/*.test.ts", "node_modules", "dist"]
 }

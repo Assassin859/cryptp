@@ -4,6 +4,8 @@ Continuity upgrade: pre–MetaMask-deploy **AI audit gate** aimed at CRE **Confi
 
 **Today (staging):** local proprietary policy via IDE proxy (`POST /cre/audit` stub). Not a TEE verdict.
 
+**Policy source of truth:** edit [`cre/shared/deployPolicy.mjs`](shared/deployPolicy.mjs) only, then run `npm run cre:sync-policy` to regenerate the CRE package twin.
+
 **Target (registered CRE workflow):** policy + API secrets in TEE; only `ALLOW` / `DENY` / `MANUAL_REVIEW` + `riskMask` leave the enclave.
 
 ## Staging first

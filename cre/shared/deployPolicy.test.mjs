@@ -81,4 +81,29 @@ describe('evaluateDeployPolicy', () => {
     });
     assert.equal(r.verdict, 'MANUAL_REVIEW');
   });
+
+  it('MANUAL_REVIEW for .transfer (not gateable ALLOW)', () => {
+    const src =
+      'pragma solidity 0.8.20; contract Payout { function pay(address payable to) public { to.transfer(1 ether); } }';
+    const f = scanSourceHeuristics(src);
+    assert.equal(f.externalCallRisk, true);
+    const r = evaluateDeployPolicy({ sourceCode: src });
+    assert.equal(r.verdict, 'MANUAL_REVIEW');
+    assert.notEqual(r.verdict, 'ALLOW');
+  });
+
+  it('MANUAL_REVIEW for .send', () => {
+    const src =
+      'pragma solidity 0.8.20; contract Payout { function pay(address payable to) public { to.send(1 ether); } }';
+    const r = evaluateDeployPolicy({ sourceCode: src });
+    assert.equal(r.verdict, 'MANUAL_REVIEW');
+  });
+
+  it('MANUAL_REVIEW for soft .call alone (not DENY)', () => {
+    const src =
+      'pragma solidity 0.8.20; contract SafeCei { uint256 public bal; function withdraw(address to) public { bal = 0; (bool ok,) = to.call{value: 1 ether}(""); require(ok); } }';
+    const r = evaluateDeployPolicy({ sourceCode: src });
+    assert.equal(r.verdict, 'MANUAL_REVIEW');
+    assert.notEqual(r.verdict, 'DENY');
+  });
 });

@@ -159,7 +159,11 @@ const AIChat: React.FC<AIChatProps> = ({
 
      if (securityReport) {
         workspaceContext += `\n\n--- RECENT SECURITY AUDIT ---`;
-        workspaceContext += `\nSafety Score: ${securityReport.score ?? 'N/A'}/100`;
+        const scoreLabel =
+          securityReport.score != null && securityReport.score >= 0
+            ? `${securityReport.score}/100`
+            : 'N/A';
+        workspaceContext += `\nSafety Score: ${scoreLabel}`;
         const findings = securityReport.findings || [];
         workspaceContext += `\nFindings: ${findings.length}`;
         findings.slice(0, 5).forEach((f) => {

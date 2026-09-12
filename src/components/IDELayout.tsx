@@ -34,8 +34,8 @@ import {
   saveDeployment,
   getDeployments,
   deleteDeployments,
-  computeProjectContentHash,
   type ProjectSourceFile,
+  computeProjectContentHash,
   saveGasProfile,
   deploymentToSimulation,
   type SaveDeploymentPayload,
@@ -73,9 +73,18 @@ import { lsGet, sessionGet, sessionSet } from '../utils/aethonStorage';
 const AIChat = React.lazy(() => import('./AIChat'));
 const AnalyticsSidebar = React.lazy(() => import('./AnalyticsSidebar'));
 import { User } from '@supabase/supabase-js';
-import { SecurityReport, scanContract } from '../utils/securityScanner';
-import { creAllowsLiveDeploy, clearCreVerdictForHash } from '../utils/creClient';
+import { SecurityReport } from '../utils/securityScanner';
 import { isCreGateEnabled } from '../utils/creConstants';
+import {
+  emptyAuditSession,
+  buildAuditSessionFromCompile,
+  invalidateAuditSession,
+  restoreAuditSession,
+  toCacheSlice,
+  fromCacheSlice,
+  allowsLiveDeploy,
+  type AuditSession,
+} from '../utils/auditSession';
 import { 
   ContractFile,
   createFile, 
@@ -128,6 +137,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [isScanning, _setIsScanning] = useState(false);
   const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
+  const [securityAuditTab, setSecurityAuditTab] = useState<'automated' | 'checklist' | 'confidential'>('automated');
   const [hasCompiledInSession, setHasCompiledInSession] = useState(false);
   const [aiPromptOverride, setAiPromptOverride] = useState<{prompt: string, theme: string} | null>(null);
   const [activeCompileDeployment, setActiveCompileDeployment] = useState<SimulatedDeployment | null>(null);
@@ -161,17 +171,20 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       activeCompileDeployment: SimulatedDeployment | null;
       lastCompiledSource: string | null;
       lastCompiledHash: string | null;
+      lastCompiledAuditSource: string | null;
   }>>({});
   const switchingFileRef = useRef(false);
   const bootstrapInFlight = useRef(false);
   const rehydrateGeneration = useRef(0);
   const rehydrateChainRef = useRef(Promise.resolve());
   const lastCompilationId = useRef<string | null>(null);
-  const lastCompiledSourceRef = useRef<string | null>(null);
-  const lastCompiledHashRef = useRef<string | null>(null);
-  /** Canonical multi-file payload bound to lastCompiledHashRef (CRE audit body). */
-  const lastCompiledAuditSourceRef = useRef<string | null>(null);
+  const auditSessionRef = useRef<AuditSession>(emptyAuditSession());
   const prevCodeByFileRef = useRef<Record<string, string>>({});
+
+  const applyAuditSession = (session: AuditSession) => {
+    auditSessionRef.current = session;
+    setSecurityReport(session.ideReport);
+  };
 
   const projectFilesForHash = (activeCode: string, fallbackName = 'Contract.sol'): ProjectSourceFile[] => {
     const files = currentProject?.files;
@@ -354,18 +367,16 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                 name: f.name,
                 content: f.id === activeFile?.id ? activeCode : f.content,
               }));
-              const { hash: contentHash, canonical } = await computeProjectContentHash(
-                filesForHash.length ? filesForHash : [{ name: activeFileName, content: activeCode }]
+              const session = await buildAuditSessionFromCompile(
+                filesForHash.length ? filesForHash : [{ name: activeFileName, content: activeCode }],
+                activeCode,
+                auditSessionRef.current.sourceHash
               );
-              lastCompiledSourceRef.current = activeCode;
-              lastCompiledHashRef.current = contentHash;
-              lastCompiledAuditSourceRef.current = canonical;
-              const report = scanContract(activeCode);
-              setSecurityReport(report);
+              applyAuditSession(session);
               const savedCompilation = await saveCompilation(userId, mostRecent.id, result, {
                 fileId: activeFile?.id,
-                contentHash,
-                securityReport: report,
+                contentHash: session.sourceHash || undefined,
+                securityReport: session.ideReport,
               });
               lastCompilationId.current = savedCompilation.id;
 
@@ -583,24 +594,27 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         const latest = await getLatestCompilation(userId, currentProject.id, activeFileId);
         if (!latest?.result?.success) return;
 
-        const { hash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
+        const files = projectFilesForHash(code);
+        const { hash, canonical } = await computeProjectContentHash(files);
         if (latest.content_hash && latest.content_hash !== hash) {
           setCompileResult(null);
-          setSecurityReport(null);
           setHasCompiledInSession(false);
-          lastCompiledSourceRef.current = null;
-          lastCompiledHashRef.current = null;
-          lastCompiledAuditSourceRef.current = null;
+          applyAuditSession(invalidateAuditSession());
           return;
         }
 
         lastCompilationId.current = latest.id;
         setCompileResult(latest.result);
-        setSecurityReport(latest.security_report ?? null);
         setHasCompiledInSession(true);
-        lastCompiledSourceRef.current = code;
-        lastCompiledHashRef.current = latest.content_hash || hash;
-        lastCompiledAuditSourceRef.current = canonical;
+        applyAuditSession(
+          restoreAuditSession({
+            files,
+            activeSource: code,
+            auditSource: canonical,
+            sourceHash: latest.content_hash || hash,
+            ideReport: latest.security_report ?? null,
+          })
+        );
       } catch (e) {
         console.error('Failed to restore compilation:', e);
       }
@@ -630,18 +644,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         const cached = fileStateCache.current[activeFileId];
         if (cached) {
             setCompileResult(cached.compileResult);
-            setSecurityReport(cached.securityReport);
             setHasCompiledInSession(cached.hasCompiledInSession);
             setActiveCompileDeployment(cached.activeCompileDeployment || null);
-            lastCompiledSourceRef.current = cached.lastCompiledSource ?? null;
-            lastCompiledHashRef.current = cached.lastCompiledHash ?? null;
+            applyAuditSession(fromCacheSlice(cached));
         } else {
             setCompileResult(null);
-            setSecurityReport(null);
             setHasCompiledInSession(false);
             setActiveCompileDeployment(null);
-            lastCompiledSourceRef.current = null;
-            lastCompiledHashRef.current = null;
+            applyAuditSession(invalidateAuditSession());
         }
         return;
     }
@@ -654,8 +664,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       setHasCompiledInSession(false);
       setActiveCompileDeployment(null);
       setActiveDeployment(null);
-      lastCompiledHashRef.current = null;
-      lastCompiledSourceRef.current = null;
+      applyAuditSession(invalidateAuditSession());
     }
     
     const timeoutId = setTimeout(saveCode, 1000);
@@ -682,49 +691,33 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     setActiveCompileDeployment(null);
     if (result && result.success && currentProject) {
        setHasCompiledInSession(true);
-       lastCompiledSourceRef.current = code;
-       const report = scanContract(code);
-       setSecurityReport(report);
+       const prevHash = auditSessionRef.current.sourceHash;
+       try {
+         const session = await buildAuditSessionFromCompile(
+           projectFilesForHash(code),
+           code,
+           prevHash
+         );
+         applyAuditSession(session);
 
-       if (activeFileId) {
-         try {
-           const prevHash = lastCompiledHashRef.current;
-           const { hash: contentHash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
-           if (prevHash) clearCreVerdictForHash(prevHash);
-           clearCreVerdictForHash(contentHash);
-           lastCompiledHashRef.current = contentHash;
-           lastCompiledAuditSourceRef.current = canonical;
+         if (activeFileId) {
            const saved = await saveCompilation(userId, currentProject.id, result, {
              fileId: activeFileId,
-             contentHash,
-             securityReport: report,
+             contentHash: session.sourceHash || undefined,
+             securityReport: session.ideReport,
            });
            lastCompilationId.current = saved.id;
-         } catch (e) {
-           console.error('Failed to persist compilation:', e);
          }
-       } else {
-         try {
-           const prevHash = lastCompiledHashRef.current;
-           const { hash, canonical } = await computeProjectContentHash(projectFilesForHash(code));
-           if (prevHash) clearCreVerdictForHash(prevHash);
-           clearCreVerdictForHash(hash);
-           lastCompiledHashRef.current = hash;
-           lastCompiledAuditSourceRef.current = canonical;
-         } catch {
-           lastCompiledHashRef.current = null;
-           lastCompiledAuditSourceRef.current = null;
-         }
+       } catch (e) {
+         console.error('Failed to bind audit session / persist compilation:', e);
+         applyAuditSession(invalidateAuditSession());
        }
 
        setShowBottomPanel(true);
        setActiveBottomTab('output');
     } else {
        setHasCompiledInSession(false);
-       lastCompiledSourceRef.current = null;
-       lastCompiledHashRef.current = null;
-       lastCompiledAuditSourceRef.current = null;
-       setSecurityReport(null);
+       applyAuditSession(invalidateAuditSession());
     }
   };
 
@@ -810,7 +803,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
          isRealChain: false,
          abi: compileResult.abi as SimulatedDeployment['abi'],
          bytecode: compileResult.bytecode,
-         sourceSnapshot: lastCompiledSourceRef.current ?? code,
+         sourceSnapshot: auditSessionRef.current.activeSource ?? code,
        };
        
        addSimulation(newSim, {
@@ -864,7 +857,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       abi: entry.abi || (compileResult?.abi as SimulatedDeployment['abi']) || [],
       bytecode: entry.bytecode || extra.bytecode || compileResult?.bytecode || undefined,
       sourceSnapshot:
-        entry.sourceSnapshot ?? lastCompiledSourceRef.current ?? undefined,
+        entry.sourceSnapshot ?? auditSessionRef.current.activeSource ?? undefined,
     };
     setSimulations(prev => [withMeta, ...prev]);
     persistDeployment(withMeta, extra).catch(console.error);
@@ -984,11 +977,9 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
        
        fileStateCache.current[activeFileId] = {
            compileResult,
-           securityReport,
            hasCompiledInSession,
            activeCompileDeployment,
-           lastCompiledSource: lastCompiledSourceRef.current,
-           lastCompiledHash: lastCompiledHashRef.current,
+           ...toCacheSlice(auditSessionRef.current),
        };
      }
      
@@ -1440,7 +1431,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
             deploymentId: savedDeploy.id,
             gasUsed: result.totalTracedGas || trace.gas || 0,
             contractSize: compileResult.contractSize ?? 0,
-            securityScore: securityReport?.score,
+            securityScore:
+              securityReport && securityReport.score >= 0 ? securityReport.score : undefined,
             txHash: payload.txHash,
             quality: result.quality,
             unmappedGas: result.unmappedGas,
@@ -1500,8 +1492,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     const promoteAbi = useSelected ? selectedAbi! : compileResult?.abi;
     const promoteBytecode = useSelected ? selectedBytecode! : compileResult?.bytecode;
     const promoteSource = useSelected
-      ? selectedSource ?? lastCompiledSourceRef.current
-      : lastCompiledSourceRef.current;
+      ? selectedSource ?? auditSessionRef.current.activeSource
+      : auditSessionRef.current.activeSource;
 
     if (!promoteBytecode || !promoteAbi) {
       setConfirmModal({
@@ -1528,7 +1520,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
         });
         return;
       }
-      if (!lastCompiledHashRef.current || lastCompiledSourceRef.current !== code) {
+      if (!auditSessionRef.current.sourceHash || auditSessionRef.current.activeSource !== code) {
         setConfirmModal({
           title: 'Recompile required',
           message: 'Session compile is stale. Recompile before promoting to a live network.',
@@ -1540,8 +1532,8 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
       }
     } else if (
       !hasCompiledInSession ||
-      lastCompiledSourceRef.current !== code ||
-      !lastCompiledHashRef.current
+      auditSessionRef.current.activeSource !== code ||
+      !auditSessionRef.current.sourceHash
     ) {
       setConfirmModal({
         title: 'Recompile required',
@@ -1638,15 +1630,18 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     };
 
     if (isCreGateEnabled()) {
-      const hash = lastCompiledHashRef.current || '';
-      const gate = creAllowsLiveDeploy(hash);
+      const gate = allowsLiveDeploy(auditSessionRef.current);
       if (!gate.ok && !gate.needsConfirm) {
         setConfirmModal({
           title: 'Confidential audit required',
           message: `${gate.message}\n\nOpen Problem Audit → Confidential, run the CRE audit, then promote again.`,
-          confirmLabel: 'Open Problem Audit',
+          confirmLabel: 'Open Confidential',
           isDangerous: false,
-          onConfirm: () => setActiveBottomTab('security'),
+          onConfirm: () => {
+            setShowBottomPanel(true);
+            setActiveBottomTab('security');
+            setSecurityAuditTab('confidential');
+          },
         });
         return;
       }
@@ -1858,7 +1853,7 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                     onPreview={handlePreviewContract}
                   />
                 )}
-                {activeActivity === 'chain' && <SimulatedChain deployments={simulations} onReset={() => setShowResetConfirm(true)} onPromote={handlePromoteContract} onInteract={(d) => { setActiveDeployment({ address: d.contractAddress, abi: d.abi || [], network: d.network, sourceSnapshot: d.sourceSnapshot ?? lastCompiledSourceRef.current ?? undefined }); setActiveActivity('interact'); }} />}
+                {activeActivity === 'chain' && <SimulatedChain deployments={simulations} onReset={() => setShowResetConfirm(true)} onPromote={handlePromoteContract} onInteract={(d) => { setActiveDeployment({ address: d.contractAddress, abi: d.abi || [], network: d.network, sourceSnapshot: d.sourceSnapshot ?? auditSessionRef.current.activeSource ?? undefined }); setActiveActivity('interact'); }} />}
                 {activeActivity === 'interact' && activeDeployment ? (
                   <ContractInteraction 
                     abi={activeDeployment.abi} 
@@ -1990,20 +1985,21 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                         <CompileOutput
                           result={compileResult}
                           code={code}
-                          contentHash={lastCompiledHashRef.current || undefined}
+                          contentHash={auditSessionRef.current.sourceHash || undefined}
                           canDeploy={
                             hasCompiledInSession
                             && compileResult.success === true
-                            && lastCompiledSourceRef.current === code
+                            && auditSessionRef.current.activeSource === code
                           }
                           onDeployment={(s, extra) => {
                             addSimulation(s, extra);
                             setActiveCompileDeployment(s);
                           }}
                           deploymentResult={activeCompileDeployment}
-                          onOpenConfidentialAudit={() => {
+          onOpenConfidentialAudit={() => {
                             setShowBottomPanel(true);
                             setActiveBottomTab('security');
+                            setSecurityAuditTab('confidential');
                           }}
                           onConfirmManualReview={askConfirmManualReview}
                         />
@@ -2014,9 +2010,11 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                         report={securityReport}
                         isScanning={isScanning}
                         hasCompileError={compileResult?.success === false}
-                        sourceCode={lastCompiledAuditSourceRef.current || code}
-                        sourceHash={lastCompiledHashRef.current || undefined}
+                        sourceCode={auditSessionRef.current.auditSource || code}
+                        sourceHash={auditSessionRef.current.sourceHash || undefined}
                         network={networkName || 'sepolia'}
+                        initialTab={securityAuditTab}
+                        onTabChange={setSecurityAuditTab}
                         contractAddress={
                           activeDeployment?.address ||
                           simulations.find((s) => s.isRealChain && s.contractAddress)?.contractAddress ||
@@ -2028,11 +2026,12 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
                        <AethonTerminal 
                          currentProject={currentProject}
                          activeFileCode={code}
+                         activeFileId={activeFileId}
                          compileResult={compileResult}
                          securityReport={securityReport}
                          onCompile={() => triggerCompile(false)}
                          onDeploy={triggerAIDeploy}
-                         lastCompiledSource={lastCompiledSourceRef.current}
+                         lastCompiledSource={auditSessionRef.current.activeSource}
                        />
                      )}
                  </div>

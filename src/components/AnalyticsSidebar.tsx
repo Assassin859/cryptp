@@ -19,6 +19,7 @@ import {
 import { isAbiFunction, asAbiArray } from '../types/abi';
 import { CompilationResult } from '../utils/hardhatCompiler';
 import { SecurityReport } from '../utils/securityScanner';
+import { formatSafetyScorePercent } from '../utils/creClient';
 import { analyzeStorageLayout } from '../utils/StorageAnalyzer';
 import { priceService, type PriceData, type PriceSource } from '../utils/PriceService';
 import { COMPILER_VERSIONS } from '../utils/compilerVersions';
@@ -226,7 +227,9 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
     return analyzeStorageLayout(sourceCode);
   }, [sourceCode]);
 
-  const safetyScore = securityReport?.score ?? 100;
+  const rawSafety = securityReport?.score;
+  const safetyScore = rawSafety != null && rawSafety >= 0 ? rawSafety : null;
+  const safetyLabel = formatSafetyScorePercent(rawSafety);
   const currentEthPrice = marketData?.eth_usd || 3000;
   const currentGasGwei =
     marketData?.gas_price_gwei && marketData.gas_price_gwei > 0
@@ -335,8 +338,16 @@ const AnalyticsSidebar: React.FC<AnalyticsSidebarProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-white/[0.03] backdrop-blur-md p-3 rounded-xl border border-white/10 flex flex-col group hover:border-blue-500/20 transition-all">
                   <span className="text-[8px] uppercase font-black tracking-widest text-gray-500 mb-1">Safety Score</span>
-                  <span className={`text-base font-black font-mono drop-shadow-[0_0_10px_rgba(0,0,0,0.5)] ${safetyScore > 80 ? 'text-green-500' : safetyScore > 50 ? 'text-orange-500' : 'text-red-500'}`}>
-                    {safetyScore.toFixed(0)}%
+                  <span className={`text-base font-black font-mono drop-shadow-[0_0_10px_rgba(0,0,0,0.5)] ${
+                    safetyScore == null
+                      ? 'text-gray-500'
+                      : safetyScore > 80
+                        ? 'text-green-500'
+                        : safetyScore > 50
+                          ? 'text-orange-500'
+                          : 'text-red-500'
+                  }`}>
+                    {safetyLabel}
                   </span>
                 </div>
                 <div className="bg-white/[0.03] backdrop-blur-md p-3 rounded-xl border border-white/10 flex flex-col group hover:border-orange-500/20 transition-all">

@@ -175,6 +175,11 @@ const RULES = {
   }
 };
 
+/**
+ * Scan a single Solidity source (AST heuristics).
+ * App UI should use scanProjectFiles / auditSession.runProblemAudit for project truth.
+ * Exported for unit tests.
+ */
 export const scanContract = (sourceCode: string): SecurityReport => {
   const trimmedCode = sourceCode.trim();
   const lines = trimmedCode.split('\n');
@@ -568,14 +573,18 @@ export const scanContract = (sourceCode: string): SecurityReport => {
     });
   }
 
-  const hasCriticalReentrancy = findings.some(f => f.id === 'S001');
+  return scoreFindings(findings, parseFailed);
+};
 
+/** Recompute summary + score from a findings list (shared by single-file and project scans). */
+export function scoreFindings(findings: SecurityFinding[], parseFailed = false): SecurityReport {
+  const hasCriticalReentrancy = findings.some((f) => f.id === 'S001');
   const summary = {
     critical: hasCriticalReentrancy ? 1 : 0,
-    high: findings.filter(f => f.severity === 'High' && f.id !== 'S001').length,
-    medium: findings.filter(f => f.severity === 'Medium').length,
-    low: findings.filter(f => f.severity === 'Low').length,
-    info: findings.filter(f => f.severity === 'Info').length
+    high: findings.filter((f) => f.severity === 'High' && f.id !== 'S001').length,
+    medium: findings.filter((f) => f.severity === 'Medium').length,
+    low: findings.filter((f) => f.severity === 'Low').length,
+    info: findings.filter((f) => f.severity === 'Info').length,
   };
 
   let score = 100;
@@ -586,11 +595,9 @@ export const scanContract = (sourceCode: string): SecurityReport => {
 
   let activeCap = 100;
   if (summary.critical > 0) activeCap = Math.min(activeCap, 20);
-  
   const totalHighs = (hasCriticalReentrancy ? 1 : 0) + summary.high;
   if (totalHighs >= 2) activeCap = Math.min(activeCap, 30);
   else if (totalHighs === 1) activeCap = Math.min(activeCap, 60);
-
   if (summary.medium > 0) activeCap = Math.min(activeCap, 75);
 
   score = Math.min(score, activeCap);
@@ -598,4 +605,48 @@ export const scanContract = (sourceCode: string): SecurityReport => {
   score = Math.max(0, score);
 
   return { score, findings, summary };
-};
+}
+
+/**
+ * Scan every project .sol file (same set used for CRE content hash) and merge findings.
+ * Empty / pragma-only files contribute nothing (avoid score -1 noise).
+ */
+export function scanProjectFiles(files: { name: string; content: string }[]): SecurityReport {
+  const solFiles = files.filter((f) => f?.name && /\.sol$/i.test(f.name));
+  const targets = solFiles.length > 0 ? solFiles : files;
+
+  const merged: SecurityFinding[] = [];
+  let anyParseError = false;
+  let anyScored = false;
+
+  for (const file of targets) {
+    const report = scanContract(file.content ?? '');
+    if (report.score === -1 && report.findings.length === 0) continue;
+    anyScored = true;
+    if (report.findings.some((f) => f.id === 'PARSE_ERROR')) anyParseError = true;
+    for (const finding of report.findings) {
+      if (finding.id === 'S000' && targets.length > 1) continue;
+      merged.push({
+        ...finding,
+        title: targets.length > 1 ? `[${file.name}] ${finding.title}` : finding.title,
+      });
+    }
+  }
+
+  if (!anyScored) {
+    return {
+      score: -1,
+      findings: [],
+      summary: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+    };
+  }
+
+  return scoreFindings(merged, anyParseError);
+}
+
+/** High-severity count used to reconcile CRE ALLOW → MANUAL_REVIEW. */
+export function ideHighFindingCount(report: SecurityReport | null | undefined): number {
+  if (!report || report.score < 0) return 0;
+  return (report.summary?.critical ?? 0) + (report.summary?.high ?? 0);
+}
+

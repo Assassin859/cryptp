@@ -9,6 +9,10 @@ import {
   isCreConfigured,
   isCreGateEnabled,
 } from './creConstants';
+import { ideHighFindingCount, type SecurityReport } from './securityScanner';
+import { reconcileAllowWithIdeHighs, formatSafetyScorePercent } from '@cre/ide-reconcile';
+
+export { formatSafetyScorePercent };
 
 export type CreVerdict = 'ALLOW' | 'DENY' | 'MANUAL_REVIEW';
 
@@ -20,6 +24,8 @@ export interface CreAuditRequest {
   contractAddress?: string;
   network?: string;
   abiHint?: string;
+  /** Optional IDE Problem Audit report — used to reconcile ALLOW vs High findings. */
+  ideReport?: SecurityReport | null;
 }
 
 export interface CreAuditResult {
@@ -34,6 +40,8 @@ export interface CreAuditResult {
   /** False for accepted/pending live — cannot unlock MetaMask deploy. */
   gateable: boolean;
   at: number;
+  /** True when ALLOW was downgraded due to IDE High findings. */
+  ideReconciled?: boolean;
 }
 
 export class CreClientError extends Error {
@@ -73,6 +81,14 @@ export function storeCreVerdict(result: CreAuditResult): void {
   cache.set(normalizeHash(result.sourceHash), result);
 }
 
+/** Downgrade staging ALLOW when Problem Audit has High/critical findings. */
+export function reconcileCreWithIdeReport(
+  result: CreAuditResult,
+  ideReport?: SecurityReport | null
+): CreAuditResult {
+  return reconcileAllowWithIdeHighs(result, ideHighFindingCount(ideReport)) as CreAuditResult;
+}
+
 /** Whether live MetaMask deploy is allowed for this hash under current prefs. */
 export function creAllowsLiveDeploy(sourceHash: string): {
   ok: boolean;
@@ -108,7 +124,9 @@ export function creAllowsLiveDeploy(sourceHash: string): {
       ok: false,
       needsConfirm: true,
       result: cached,
-      message: 'CRE MANUAL_REVIEW — confirm to proceed or fix findings',
+      message: cached.ideReconciled
+        ? cached.reason
+        : 'CRE MANUAL_REVIEW — confirm to proceed or fix findings',
     };
   }
   return {
@@ -229,6 +247,7 @@ export async function requestCreAudit(req: CreAuditRequest): Promise<CreAuditRes
     at: body.at || Date.now(),
   };
 
-  storeCreVerdict(result);
-  return result;
+  const reconciled = reconcileCreWithIdeReport(result, req.ideReport);
+  storeCreVerdict(reconciled);
+  return reconciled;
 }

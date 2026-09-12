@@ -1,6 +1,6 @@
 /**
  * Proprietary audit policy for Aethon deploy gate.
- * Typed implementation for CRE WASM; keep cre/shared/deployPolicy.mjs in sync for the proxy stub.
+ * Values come from generated deployPolicy.ts (synced from cre/shared/deployPolicy.mjs).
  * Evaluated inside the TEE handler (handlerInTee) when CRE is registered —
  * only the final verdict should leave the enclave.
  */

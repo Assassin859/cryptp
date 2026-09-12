@@ -3,7 +3,8 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { browserVM } from '../utils/browserVM';
-import { scanContract, type SecurityFinding } from '../utils/securityScanner';
+import { type SecurityFinding } from '../utils/securityScanner';
+import { runProblemAudit } from '../utils/auditSession';
 import { analyzeStorageLayout } from '../utils/StorageAnalyzer';
 import { COMPLEX_FUNCTIONS, COMPLEX_FUNCTION_OVERHEAD } from '../constants/gas';
 import { CompilationResult } from '../utils/hardhatCompiler';
@@ -12,6 +13,7 @@ interface AethonTerminalProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   currentProject: any;
   activeFileCode?: string;
+  activeFileId?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   compileResult: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +26,7 @@ interface AethonTerminalProps {
 const AethonTerminal: React.FC<AethonTerminalProps> = ({
   currentProject,
   activeFileCode,
+  activeFileId,
   compileResult,
   securityReport,
   onCompile,
@@ -39,6 +42,7 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
   const stateRef = useRef({
     currentProject,
     activeFileCode,
+    activeFileId,
     compileResult,
     securityReport,
     onCompile,
@@ -50,13 +54,14 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
     stateRef.current = {
       currentProject,
       activeFileCode,
+      activeFileId,
       compileResult,
       securityReport,
       onCompile,
       onDeploy,
       lastCompiledSource,
     };
-  }, [currentProject, activeFileCode, compileResult, securityReport, onCompile, onDeploy, lastCompiledSource]);
+  }, [currentProject, activeFileCode, activeFileId, compileResult, securityReport, onCompile, onDeploy, lastCompiledSource]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -491,23 +496,42 @@ const AethonTerminal: React.FC<AethonTerminalProps> = ({
         case 'scan':
         case 'audit': {
           term.writeln('Running Security Radar audit...');
-          const auditCode = stateRef.current.activeFileCode;
+          const st = stateRef.current;
+          const auditCode = st.activeFileCode;
           if (!auditCode) {
             term.writeln('\x1b[1;31m✖ Code is empty.\x1b[0m Open a Solidity file first.');
             break;
           }
           try {
-            const report = stateRef.current.securityReport ?? scanContract(auditCode);
-            const isCached = !!stateRef.current.securityReport;
-            const isStale = isCached && stateRef.current.lastCompiledSource !== auditCode;
-            const source = isCached ? 'cached' : 'live scan';
+            const files = (st.currentProject?.files || []).map(
+              (f: { id?: string; name: string; content: string }) => ({
+                name: f.name,
+                content: f.id && f.id === st.activeFileId ? auditCode : f.content,
+              })
+            );
+            const projectFiles =
+              files.length > 0
+                ? files
+                : [{ name: 'Contract.sol', content: auditCode }];
+
+            const isCached = !!st.securityReport;
+            const isStale = isCached && st.lastCompiledSource !== auditCode;
+            const report =
+              isCached && !isStale
+                ? st.securityReport
+                : runProblemAudit(projectFiles);
+            const source = isCached && !isStale ? 'cached project scan' : 'live project scan';
 
             section('Security Radar Report');
             term.writeln(`\x1b[90m  Source: ${source}\x1b[0m`);
             if (isStale) {
-              term.writeln('\x1b[1;33m  ⚠ Warning: code has changed since last compile\x1b[0m');
+              term.writeln('\x1b[1;33m  ⚠ Warning: code has changed since last compile — rescanned project files\x1b[0m');
             }
-            term.writeln(`  Safety Score : \x1b[1;${report.score > 80 ? '32' : report.score > 50 ? '33' : '31'}m${report.score}/100\x1b[0m`);
+            if (report.score < 0) {
+              term.writeln('  Safety Score : \x1b[1;90mN/A\x1b[0m (empty / pragma-only — not scored)');
+            } else {
+              term.writeln(`  Safety Score : \x1b[1;${report.score > 80 ? '32' : report.score > 50 ? '33' : '31'}m${report.score}/100\x1b[0m`);
+            }
             term.writeln(`  Findings     : \x1b[1;31m${report.summary.high + report.summary.critical} High\x1b[0m  \x1b[1;33m${report.summary.medium} Medium\x1b[0m  \x1b[1;36m${report.summary.low} Low\x1b[0m`);
 
             if (report.findings.length > 0) {

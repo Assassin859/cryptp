@@ -1,6 +1,9 @@
 /**
  * Shared Aethon deploy-gate policy (proxy stub + CRE workflow package).
  * Plain ESM so Node `cre-proxy.mjs` and TS can import without a build step.
+ *
+ * Heuristics are a staging deploy gate — complementary to IDE AST Problem Audit,
+ * not a line-for-line mirror of securityScanner rules.
  */
 
 export const CONFIDENCE_FLOOR = 0.7;
@@ -14,7 +17,16 @@ export function emptyRiskFlags() {
   };
 }
 
-/** Heuristic scan of source — mirrors IDE tier-0 patterns for staging / stub. */
+export function hardRisk(flags) {
+  return flags.obfuscatedTax || flags.privilegeEscalation || flags.logicBomb;
+}
+
+/** External-call risk alone (no hard flags) → MANUAL_REVIEW, not automatic DENY. */
+export function softExternalOnly(flags) {
+  return flags.externalCallRisk && !hardRisk(flags);
+}
+
+/** Heuristic scan of source for staging / stub deploy gate. */
 export function scanSourceHeuristics(source) {
   const flags = emptyRiskFlags();
   const s = String(source || '').toLowerCase();
@@ -34,7 +46,10 @@ export function scanSourceHeuristics(source) {
   ) {
     flags.privilegeEscalation = true;
   }
-  if (/\.call\s*\{|\.call\(|delegatecall|staticcall/.test(s)) {
+  // Include transfer/send (IDE reentrancy class) plus low-level calls.
+  if (
+    /\.call\s*\{|\.call\(|delegatecall|staticcall|\.transfer\s*\(|\.send\s*\(/.test(s)
+  ) {
     flags.externalCallRisk = true;
   }
   if (/block\.timestamp|blockhash|tx\.origin/.test(s) && /random|lottery|gambl/.test(s)) {
@@ -72,7 +87,7 @@ export function anyRisk(flags) {
 
 /**
  * Core policy: heuristics + optional dual-model signals.
- * Without explicit model fields, reasons stay honest (local staging heuristics).
+ * Hard risks → DENY. Soft external-call-only → MANUAL_REVIEW (not blanket DENY on .call).
  */
 export function evaluateDeployPolicy(input = {}) {
   const source = input.sourceCode || '';
@@ -84,11 +99,18 @@ export function evaluateDeployPolicy(input = {}) {
     input.primaryConfidence !== undefined ||
     input.secondaryConfidence !== undefined;
 
-  const primaryRec = input.primaryRecommendation ?? (anyRisk(heuristic) ? 'deny' : 'allow');
-  const secondaryRec =
-    input.secondaryRecommendation ?? (anyRisk(heuristic) ? 'deny' : 'allow');
-  const primaryConf = input.primaryConfidence ?? (anyRisk(heuristic) ? 0.85 : 0.9);
-  const secondaryConf = input.secondaryConfidence ?? (anyRisk(heuristic) ? 0.85 : 0.9);
+  const defaultRec = hardRisk(heuristic)
+    ? 'deny'
+    : softExternalOnly(heuristic)
+      ? 'review'
+      : 'allow';
+
+  const primaryRec = input.primaryRecommendation ?? defaultRec;
+  const secondaryRec = input.secondaryRecommendation ?? defaultRec;
+  const primaryConf =
+    input.primaryConfidence ?? (anyRisk(heuristic) ? 0.85 : 0.9);
+  const secondaryConf =
+    input.secondaryConfidence ?? (anyRisk(heuristic) ? 0.85 : 0.9);
 
   const modelFlags = emptyRiskFlags();
   if (primaryRec === 'deny' || secondaryRec === 'deny') {
@@ -98,19 +120,22 @@ export function evaluateDeployPolicy(input = {}) {
   const mask = riskFlagsToMask(merged);
   const confidence = Math.min(primaryConf, secondaryConf);
 
-  if (anyRisk(merged) || primaryRec === 'deny' || secondaryRec === 'deny') {
+  const explicitDeny = hadExplicitModels && (primaryRec === 'deny' || secondaryRec === 'deny');
+
+  if (hardRisk(merged) || explicitDeny) {
     return {
       verdict: 'DENY',
       riskFlags: merged,
       riskMask: mask,
       reason: hadExplicitModels
         ? 'Risk flag or model DENY — live deploy blocked'
-        : 'Local staging policy flagged risk patterns — live deploy blocked',
+        : 'Local staging policy flagged hard risk patterns — live deploy blocked',
       confidence,
     };
   }
 
   if (
+    softExternalOnly(merged) ||
     primaryRec === 'review' ||
     secondaryRec === 'review' ||
     primaryRec !== secondaryRec ||
@@ -120,9 +145,11 @@ export function evaluateDeployPolicy(input = {}) {
       verdict: 'MANUAL_REVIEW',
       riskFlags: merged,
       riskMask: mask,
-      reason: hadExplicitModels
-        ? 'Model disagreement, low confidence, or review recommended'
-        : 'Local staging policy requires manual review',
+      reason: softExternalOnly(merged) && !hadExplicitModels
+        ? 'Local staging policy: external call / transfer / send — manual review before live deploy'
+        : hadExplicitModels
+          ? 'Model disagreement, low confidence, or review recommended'
+          : 'Local staging policy requires manual review',
       confidence,
     };
   }

@@ -27,6 +27,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      '@cre/ide-reconcile': path.resolve(__dirname, 'cre/shared/ideReconcile.mjs'),
       '@ethereumjs/util/dist/esm/kzg.js': path.resolve(__dirname, 'src/shims/ethereumjs-kzg.ts'),
     },
     dedupe: ['@ethereumjs/util'],

@@ -183,7 +183,7 @@ function DeploymentGuide({ isSidebar = false }: DeploymentGuideProps) {
           </div>
           <ol className="text-gray-300 space-y-3 list-decimal list-inside">
             <li className="pl-2">After compiling, open the <strong>Problem Audit</strong> tab in the bottom panel</li>
-            <li className="pl-2">Aethon runs <strong>15 AST-based security rules</strong> — reentrancy, tx.origin, overflow, selfdestruct, and more</li>
+            <li className="pl-2">Aethon runs <strong>18 AST-based security rules</strong> — reentrancy, tx.origin, overflow, selfdestruct, and more (advisory; CRE gates live deploy)</li>
             <li className="pl-2">Check the <strong>Analytics</strong> sidebar (📊) for the Security Radar and Market Cost Projection</li>
             <li className="pl-2">Aim for a score of <strong>90+</strong> before deploying to mainnet</li>
           </ol>

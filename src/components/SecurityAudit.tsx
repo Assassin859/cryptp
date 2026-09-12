@@ -9,6 +9,8 @@ import { useWeb3 } from '../context/Web3Context';
 import { getErrorMessage } from '../utils/errorMessage';
 import { loadGraphAuditContext, type GraphAuditContext } from '../utils/graphContext';
 
+type AuditTab = 'automated' | 'checklist' | 'confidential';
+
 interface SecurityAuditProps {
   report: SecurityReport | null;
   isScanning: boolean;
@@ -19,6 +21,30 @@ interface SecurityAuditProps {
   network?: string;
   /** Sepolia contract to pull The Graph Indexed history for Continuity context */
   contractAddress?: string;
+  /** Controlled tab (e.g. deep-link to Confidential from Output / promote). */
+  initialTab?: AuditTab;
+  onTabChange?: (tab: AuditTab) => void;
+}
+
+/** Map internal S00x ids to SWC registry docs; omit link when unmapped. */
+function swcRegistryHref(id: string): string | null {
+  if (/^SWC-\d+$/i.test(id)) return `https://swcregistry.io/docs/${id}`;
+  const map: Record<string, string> = {
+    S001: 'SWC-107',
+    S002: 'SWC-115',
+    S003: 'SWC-120',
+    S004: 'SWC-103',
+    S005: 'SWC-106',
+    S006: 'SWC-128',
+    S007: 'SWC-116',
+    S008: 'SWC-101',
+    S009: 'SWC-119',
+    S010: 'SWC-100',
+    S017: 'SWC-128',
+    S018: 'SWC-112',
+  };
+  const swc = map[id];
+  return swc ? `https://swcregistry.io/docs/${swc}` : null;
 }
 
 const SeverityBadge: React.FC<{ severity: string }> = ({ severity }) => {
@@ -68,9 +94,11 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
   sourceHash = '',
   network = 'sepolia',
   contractAddress = '',
+  initialTab = 'automated',
+  onTabChange,
 }) => {
   const { signer, isConnected, connect } = useWeb3();
-  const [internalTab, setInternalTab] = useState<'automated' | 'checklist' | 'confidential'>('automated');
+  const [internalTab, setInternalTab] = useState<AuditTab>(initialTab);
   const [creBusy, setCreBusy] = useState(false);
   const [creError, setCreError] = useState<string | null>(null);
   const [recordBusy, setRecordBusy] = useState(false);
@@ -80,6 +108,15 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
   const [creResult, setCreResult] = useState<CreAuditResult | null>(
     () => (sourceHash ? getCachedCreVerdict(sourceHash) || null : null)
   );
+
+  useEffect(() => {
+    setInternalTab(initialTab);
+  }, [initialTab]);
+
+  const setTab = (tab: AuditTab) => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
 
   useEffect(() => {
     setCreResult(sourceHash ? getCachedCreVerdict(sourceHash) || null : null);
@@ -115,6 +152,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
         sourceCode,
         sourceHash,
         network,
+        ideReport: report,
       });
       setCreResult(result);
     } catch (e) {
@@ -172,8 +210,8 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
     );
   }
 
-  // score === -1 / missing report: still show Confidential (deploy gate). Empty state is Report-tab only.
-  const reportReady = Boolean(report && report.score !== -1);
+  // score < 0 / missing report: still show Confidential (deploy gate). Empty state is Report-tab only.
+  const reportReady = Boolean(report && report.score >= 0);
   const displayScore = reportReady && report ? report.score : null;
   const summary = reportReady && report ? report.summary : { high: 0, critical: 0, medium: 0, low: 0 };
 
@@ -198,6 +236,11 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
         : creResult.verdict === 'DENY'
           ? 'text-red-400'
           : 'text-yellow-400';
+
+  const isStagingLabel =
+    !creResult ||
+    creResult.mode === 'stub' ||
+    creResult.confidential === false;
 
   return (
     <div className="flex flex-col h-full bg-gray-950">
@@ -227,7 +270,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
           
           <div className="mt-auto space-y-1.5">
              <button 
-               onClick={() => setInternalTab('automated')}
+               onClick={() => setTab('automated')}
                className={`w-full py-1.5 rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                  internalTab === 'automated' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
                }`}
@@ -235,7 +278,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                <ShieldCheck className="h-3 w-3" /> Report
              </button>
              <button 
-               onClick={() => setInternalTab('checklist')}
+               onClick={() => setTab('checklist')}
                className={`w-full py-1.5 rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                  internalTab === 'checklist' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
                }`}
@@ -243,7 +286,7 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                <ClipboardCheck className="h-3 w-3" /> Checklist
              </button>
              <button 
-               onClick={() => setInternalTab('confidential')}
+               onClick={() => setTab('confidential')}
                className={`w-full py-1.5 rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                  internalTab === 'confidential' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
                }`}
@@ -258,9 +301,22 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
             <SecurityChecklist isPanelMode />
           ) : internalTab === 'confidential' ? (
             <div className="space-y-3 pb-4">
+              <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded">
+                <p className="text-[10px] font-bold text-amber-200/90 uppercase tracking-widest mb-1">
+                  Problem Audit ≠ CRE gate
+                </p>
+                <p className="text-[10px] text-gray-500 leading-relaxed">
+                  IDE findings are advisory. The Confidential CRE verdict controls live MetaMask deploy when the gate is on.
+                </p>
+              </div>
               <div className="p-3 bg-gray-900 border border-gray-800 rounded">
-                <p className="text-[10px] font-bold text-gray-200 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                  <Lock className="h-3 w-3 text-indigo-400" /> Chainlink CRE gate (staging)
+                <p className="text-[10px] font-bold text-gray-200 uppercase tracking-widest mb-1 flex items-center gap-1.5 flex-wrap">
+                  <Lock className="h-3 w-3 text-indigo-400" /> Chainlink CRE gate
+                  {isStagingLabel && (
+                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
+                      Staging policy (not TEE)
+                    </span>
+                  )}
                 </p>
                 <p className="text-[10px] text-gray-500 leading-relaxed">
                   Stub mode runs Aethon&apos;s proprietary policy locally via the audit proxy (not inside a TEE yet).
@@ -303,14 +359,26 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
               )}
               {creResult && (
                 <div className="p-3 bg-gray-900 border border-gray-800 rounded space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className={`text-sm font-black uppercase tracking-widest ${verdictColor}`}>
                       {creResult.mode === 'accepted' || !creResult.verdict
                         ? 'ACCEPTED'
                         : creResult.verdict}
                     </span>
-                    <span className="text-[9px] font-mono text-gray-500 uppercase">{creResult.mode}</span>
+                    <div className="flex items-center gap-1.5">
+                      {(creResult.mode === 'stub' || creResult.confidential === false) && (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
+                          Staging (not TEE)
+                        </span>
+                      )}
+                      <span className="text-[9px] font-mono text-gray-500 uppercase">{creResult.mode}</span>
+                    </div>
                   </div>
+                  {creResult.ideReconciled && (
+                    <p className="text-[10px] text-amber-300/90 border border-amber-500/25 bg-amber-500/10 rounded p-2">
+                      Reconciled with Problem Audit: CRE staging ALLOW was downgraded because IDE High findings are present.
+                    </p>
+                  )}
                   {creResult.mode === 'accepted' && (
                     <p className="text-[10px] text-yellow-400/90 border border-yellow-500/20 bg-yellow-500/5 rounded p-2">
                       Workflow accepted — not gateable for deploy until a real verdict exists. Use Stub mode for a
@@ -387,7 +455,9 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                     const levels: Record<string, number> = { High: 3, Medium: 2, Low: 1, Info: 0 };
                     return levels[b.severity] - levels[a.severity];
                   })
-                  .map((finding, idx) => (
+                  .map((finding, idx) => {
+                    const href = swcRegistryHref(finding.id);
+                    return (
                   <div key={idx} className="p-3 bg-gray-900 border border-gray-800 rounded hover:border-gray-700 transition-colors group">
                     <div className="flex items-center justify-between mb-2">
                        <div className="flex items-center gap-2">
@@ -395,9 +465,13 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                           <ConfidenceBadge confidence={finding.confidence} />
                           <h4 className="text-[11px] font-bold text-gray-200 group-hover:text-indigo-400 transition-colors truncate max-w-[200px] uppercase tracking-tight">{finding.title}</h4>
                        </div>
-                       <a href={`https://swcregistry.io/docs/${finding.id}`} target="_blank" rel="noreferrer" title="Registry Reference">
-                          <ExternalLink className="h-3 w-3 text-gray-600 hover:text-gray-400" />
-                       </a>
+                       {href ? (
+                         <a href={href} target="_blank" rel="noreferrer" title="SWC Registry Reference">
+                            <ExternalLink className="h-3 w-3 text-gray-600 hover:text-gray-400" />
+                         </a>
+                       ) : (
+                         <span className="text-[8px] font-mono text-gray-600" title="Internal rule id">{finding.id}</span>
+                       )}
                     </div>
                     <p className="text-[10px] text-gray-500 leading-relaxed mb-3 line-clamp-2 italic">{finding.description}</p>
                     <div className="pt-2 border-t border-gray-800/50">
@@ -407,13 +481,14 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                        <p className="text-[10px] text-gray-400 leading-snug">{finding.recommendation}</p>
                     </div>
                   </div>
-                ))
+                    );
+                  })
               )}
             </div>
           )}
           {internalTab === 'automated' && reportReady && (
             <p className="text-[9px] text-gray-600 px-3 pb-3 border-t border-gray-800/50 pt-2">
-              Static heuristics only — staging CRE audit (Problem Audit → Confidential) is the live deploy gate.
+              Problem Audit is advisory AST heuristics — Confidential CRE controls the live deploy gate.
             </p>
           )}
         </div>
