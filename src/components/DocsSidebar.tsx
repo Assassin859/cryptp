@@ -71,7 +71,7 @@ const DocsSidebar: React.FC = () => {
                            Docs <ExternalLink className="size-2.5" />
                         </a>
                      </div>
-                     <p className="text-[9px] text-[#858585]">Token Factory → Uniswap Continuity → v4 CounterHook, or New File template. Compile ≥0.8.24, sandboxBumpAfterSwap in Interact. docs/UNISWAP.md · FEEDBACK.md for UF prize form.</p>
+                     <p className="text-[9px] text-[#858585]">Token Factory → Uniswap Continuity → v4 CounterHook. Compile ≥0.8.24. MetaMask + Uniswap v4 CREATE2 in Output mines flags and deploys; or sandboxBumpAfterSwap in Interact. docs/UNISWAP.md · FEEDBACK.md.</p>
                   </div>
 
                   <div className="pt-3">

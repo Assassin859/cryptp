@@ -66,10 +66,14 @@ export async function loadGraphAuditContext(
       fetchValueChangedForContract(contractAddress, 5),
     ]);
     const registered = Boolean(indexed);
+    const base = formatValueChangedBlurb(events, { registered });
+    const kindNote = indexed?.kind
+      ? `\n- Registry kind: ${indexed.kind}`
+      : '';
     return {
       configured: true,
       registered,
-      summary: formatValueChangedBlurb(events, { registered }),
+      summary: `${base}${kindNote}`,
       events,
     };
   } catch (e) {
@@ -81,4 +85,10 @@ export async function loadGraphAuditContext(
       events: [],
     };
   }
+}
+
+/** True when Indexed history suggests prior DENY for continuity soft-review. */
+export function graphSuggestsManualReview(ctx: GraphAuditContext | null | undefined): boolean {
+  if (!ctx?.summary) return false;
+  return /DENY|verdictCode[=:]?\s*2/i.test(ctx.summary);
 }

@@ -1,20 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DEFAULT_GAS_LIMIT, MIN_GAS_LIMIT, MAX_GAS_LIMIT } from '../constants/gas';
 import { CompilationResult } from '../utils/hardhatCompiler';
-import { ethers, ContractFactory, InterfaceAbi } from 'ethers';
+import { ethers, ContractFactory, Interface, InterfaceAbi, concat } from 'ethers';
 import { SimulatedDeployment } from '../types';
 import { browserVM } from '../utils/browserVM';
-import { 
-  AlertTriangle, 
-  CheckCircle, 
-  Copy, 
-  ChevronDown, 
-  ChevronUp, 
-  Rocket, 
-  Loader, 
-  FileCode, 
-  Database, 
-  Wallet 
+import {
+  AlertTriangle,
+  CheckCircle,
+  Copy,
+  ChevronDown,
+  ChevronUp,
+  Rocket,
+  Loader,
+  FileCode,
+  Database,
+  Wallet,
+  Layers,
 } from 'lucide-react';
 import { useWeb3 } from '../context/Web3Context';
 import { getErrorMessage } from '../utils/errorMessage';
@@ -24,6 +25,21 @@ import type { SaveDeploymentPayload } from '../utils/userData';
 import { creAllowsLiveDeploy } from '../utils/creClient';
 import { isCreGateEnabled } from '../utils/creConstants';
 import { SEPOLIA_CHAIN_ID } from '../utils/ethUsdConstants';
+import {
+  abiLooksLikeCounterHook,
+  addressMatchesFlags,
+  COUNTER_HOOK_FLAGS,
+  CREATE2_DEPLOYER,
+  create2DeployCalldata,
+  hashInitCode,
+  mineHookSalt,
+} from '../utils/hookMiner';
+import {
+  getCounterHookAddress,
+  getSepoliaPoolManager,
+  setCounterHookAddress,
+} from '../utils/uniswapConstants';
+import { priceService } from '../utils/PriceService';
 
 interface CompileOutputProps {
   result: CompilationResult;
@@ -53,13 +69,19 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
   const [executionEnv, setExecutionEnv] = useState<'sandbox' | 'injected'>('sandbox');
   const [gasLimit, setGasLimit] = useState<string>(String(DEFAULT_GAS_LIMIT));
   const [constructorArgs, setConstructorArgs] = useState<Record<string, string>>({});
+  const [useCreate2Hook, setUseCreate2Hook] = useState(false);
+  const [create2Info, setCreate2Info] = useState<string | null>(null);
+  const [bumpInfo, setBumpInfo] = useState<string | null>(null);
+  const [deployCostHint, setDeployCostHint] = useState<string | null>(null);
 
   const abiList = asAbiArray(result.abi);
   const constructorInputs = (abiList.find(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (item: any) => item && item.type === 'constructor'
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) as any)?.inputs || [];
+
+  const isCounterHook = abiLooksLikeCounterHook(result.abi);
 
   const isDegradedCompile = Boolean(result.isMockResult);
   const deployBlocked = !canDeploy || isDegradedCompile;
@@ -74,6 +96,46 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
     if (isNaN(parsed) || parsed < MIN_GAS_LIMIT) return DEFAULT_GAS_LIMIT;
     return Math.min(parsed, MAX_GAS_LIMIT);
   };
+
+  useEffect(() => {
+    if (!isCounterHook) return;
+    setUseCreate2Hook(true);
+    const poolManager = getSepoliaPoolManager();
+    setConstructorArgs((prev) => {
+      const next = { ...prev };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      constructorInputs.forEach((input: any, index: number) => {
+        if (input.type === 'address') {
+          const key = constructorArgKey(input, index);
+          if (!next[key]?.trim()) {
+            next[key] = poolManager;
+          }
+        }
+      });
+      return next;
+    });
+  }, [isCounterHook, result.abi]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await priceService.getLatestData();
+        if (cancelled) return;
+        const safeGas = clampGasLimit(gasLimit);
+        const ethAmount = safeGas * data.gas_price_gwei * 1e-9;
+        const usd = priceService.calculateUSD(ethAmount, data.eth_usd);
+        setDeployCostHint(
+          `~$${usd.toFixed(2)} USD · ${data.gas_price_gwei.toFixed(1)} gwei · $${data.eth_usd.toFixed(2)} ETH/USD (${data.source})`
+        );
+      } catch {
+        if (!cancelled) setDeployCostHint(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gasLimit]);
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -91,6 +153,144 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
 
   const isMetaMaskAvailable = () => typeof window !== 'undefined' && Boolean(window.ethereum);
 
+  const assertCreGate = async (): Promise<boolean> => {
+    if (!isCreGateEnabled()) return true;
+    const hash = contentHash || '';
+    const gate = creAllowsLiveDeploy(hash);
+    if (!gate.ok && !gate.needsConfirm) {
+      setDeploymentError(gate.message);
+      onOpenConfidentialAudit?.();
+      return false;
+    }
+    if (gate.needsConfirm) {
+      const proceed = onConfirmManualReview
+        ? await onConfirmManualReview(gate.message)
+        : false;
+      if (!proceed) {
+        onOpenConfidentialAudit?.();
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const deployCreate2CounterHook = async () => {
+    if (deployBlocked) return;
+    if (!result.abi || !result.bytecode) {
+      setDeploymentError('ABI or bytecode missing');
+      return;
+    }
+
+    if (!isMetaMaskAvailable() || !window.ethereum) {
+      setDeploymentError('MetaMask not detected.');
+      return;
+    }
+
+    if (!(await assertCreGate())) return;
+
+    setIsDeploying(true);
+    setDeploymentError(null);
+    setCreate2Info(null);
+    setBumpInfo(null);
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const net = await provider.getNetwork();
+      if (Number(net.chainId) !== SEPOLIA_CHAIN_ID) {
+        setDeploymentError(
+          `Wrong network: MetaMask is on chain ${Number(net.chainId)}. Switch to Sepolia (${SEPOLIA_CHAIN_ID}) before CREATE2 deploy.`
+        );
+        return;
+      }
+
+      const signer = await provider.getSigner();
+      const deployerAddress = await signer.getAddress();
+      const abi = result.abi as InterfaceAbi;
+      const processedArgs = parseConstructorArgs(constructorInputs, constructorArgs);
+
+      const iface = new Interface(abi);
+      const encodedArgs = iface.encodeDeploy(processedArgs);
+      const bytecode = result.bytecode.startsWith('0x') ? result.bytecode : `0x${result.bytecode}`;
+      const initCode = concat([bytecode, encodedArgs]);
+      const initCodeHash = hashInitCode(initCode);
+
+      setCreate2Info(
+        `Mining CREATE2 salt for flag-encoded address (0x${COUNTER_HOOK_FLAGS.toString(16)})…`
+      );
+
+      const mined = mineHookSalt({
+        initCodeHash,
+        flags: COUNTER_HOOK_FLAGS,
+        msgSender: deployerAddress,
+      });
+
+      if (!addressMatchesFlags(mined.address, COUNTER_HOOK_FLAGS)) {
+        throw new Error('Internal error: mined address does not match required hook flags');
+      }
+
+      setCreate2Info(
+        `Mined salt in ${mined.iterations} iterations → ${mined.address} (CREATE2 deployer ${CREATE2_DEPLOYER.slice(0, 10)}…)`
+      );
+
+      const codeAt = await provider.getCode(mined.address);
+      let txHash = '';
+
+      if (codeAt && codeAt !== '0x') {
+        setCreate2Info(`Hook already deployed at ${mined.address} — skipping CREATE2 tx.`);
+      } else {
+        setCreate2Info(`Sending CREATE2 deploy tx → ${mined.address}…`);
+        const tx = await signer.sendTransaction({
+          to: CREATE2_DEPLOYER,
+          data: create2DeployCalldata(mined.salt, initCode),
+        });
+        txHash = tx.hash;
+        const receipt = await tx.wait();
+        if (!receipt || receipt.status !== 1) {
+          throw new Error('CREATE2 deploy transaction reverted');
+        }
+        txHash = receipt.hash;
+      }
+
+      const deployedCode = await provider.getCode(mined.address);
+      if (!deployedCode || deployedCode === '0x') {
+        throw new Error(`CREATE2 failed — no code at ${mined.address}`);
+      }
+
+      setCounterHookAddress(mined.address);
+
+      const hook = new ethers.Contract(mined.address, abi, signer);
+      setBumpInfo('Calling sandboxBumpAfterSwap() as Continuity proof…');
+      const bumpTx = await hook.sandboxBumpAfterSwap();
+      const bumpReceipt = await bumpTx.wait();
+      const afterSwapCount = await hook.afterSwapCount();
+      setBumpInfo(
+        `sandboxBumpAfterSwap() confirmed (tx ${bumpReceipt?.hash?.slice(0, 10)}…) — afterSwapCount = ${afterSwapCount.toString()}`
+      );
+
+      const deploymentEntry: SimulatedDeployment = {
+        contractAddress: mined.address,
+        transactionHash: txHash || bumpReceipt?.hash || '',
+        network: networkName || 'Sepolia',
+        blockNumber: bumpReceipt?.blockNumber || 0,
+        gasUsed: bumpReceipt ? Number(bumpReceipt.gasUsed) : 0,
+        deployer: account || deployerAddress,
+        timestamp: new Date().toISOString(),
+        status: 'confirmed',
+        isRealChain: true,
+        abi: result.abi as SimulatedDeployment['abi'],
+      };
+
+      onDeployment?.(deploymentEntry, {
+        deployment_kind: 'promoted',
+        constructor_args: processedArgs,
+      });
+    } catch (error: unknown) {
+      setDeploymentError(getErrorMessage(error) || 'CREATE2 CounterHook deploy failed');
+    } finally {
+      setIsDeploying(false);
+    }
+  };
+
   const deployWithMetaMask = async () => {
     if (deployBlocked) return;
     if (!result.abi || !result.bytecode) {
@@ -103,27 +303,16 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
       return;
     }
 
-    if (isCreGateEnabled()) {
-      const hash = contentHash || '';
-      const gate = creAllowsLiveDeploy(hash);
-      if (!gate.ok && !gate.needsConfirm) {
-        setDeploymentError(gate.message);
-        onOpenConfidentialAudit?.();
-        return;
-      }
-      if (gate.needsConfirm) {
-        const proceed = onConfirmManualReview
-          ? await onConfirmManualReview(gate.message)
-          : false;
-        if (!proceed) {
-          onOpenConfidentialAudit?.();
-          return;
-        }
-      }
+    if (useCreate2Hook && isCounterHook) {
+      return deployCreate2CounterHook();
     }
+
+    if (!(await assertCreGate())) return;
 
     setIsDeploying(true);
     setDeploymentError(null);
+    setCreate2Info(null);
+    setBumpInfo(null);
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -137,12 +326,12 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
       const signer = await provider.getSigner();
       const abi = result.abi as InterfaceAbi;
       const factory = new ContractFactory(abi, result.bytecode, signer);
-      
+
       const processedArgs = parseConstructorArgs(constructorInputs, constructorArgs);
       const deployment = await factory.deploy(...processedArgs);
       const contract = await deployment.waitForDeployment();
       const contractAddress = await contract.getAddress();
-      
+
       const deployTx = deployment.deploymentTransaction();
       const receipt = deployTx ? await provider.waitForTransaction(deployTx.hash) : null;
 
@@ -172,9 +361,10 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
 
     setIsDeploying(true);
     setDeploymentError(null);
+    setCreate2Info(null);
+    setBumpInfo(null);
 
     try {
-      // browserVM is statically imported at the top
       const safeGasLimit = clampGasLimit(gasLimit);
       const processedArgs = parseConstructorArgs(constructorInputs, constructorArgs);
 
@@ -246,12 +436,27 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
     (i) => isAbiFunction(i) && !isReadFunction(i)
   ).length;
 
+  const isCreate2Deploy =
+    executionEnv === 'injected' && isCounterHook && useCreate2Hook;
+
+  const deployButtonLabel =
+    executionEnv === 'sandbox'
+      ? 'Deploy to Sandbox'
+      : isCreate2Deploy
+        ? 'Deploy CounterHook (CREATE2)'
+        : `Deploy to ${networkName || 'Network'}`;
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-[#1e1e1e]">
       <div className="bg-[#252526] border-b border-[#2d2d2d] p-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Rocket className="h-4 w-4 text-green-500" />
           <span className="text-[11px] font-bold uppercase tracking-wider text-green-400">Contract Ready</span>
+          {isCounterHook && (
+            <span className="text-[9px] font-bold uppercase tracking-wider text-pink-400/80 flex items-center gap-1 ml-1">
+              <Layers className="h-3 w-3" /> CounterHook
+            </span>
+          )}
         </div>
       </div>
 
@@ -283,7 +488,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
             </span>
             {expandedSections.has('overview') ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
-          
+
           {expandedSections.has('overview') && (
             <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-3 bg-[#1a1a1a]">
               <div className="bg-[#252526] p-3 rounded border border-[#333]">
@@ -310,7 +515,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
               </span>
               {expandedSections.has('constructor') ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
-            
+
             {expandedSections.has('constructor') && (
               <div className="p-4 space-y-3 bg-[#1a1a1a] border-t border-[#2d2d2d]/30">
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -341,7 +546,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
             <div>
               <label className="text-[10px] uppercase font-black text-gray-500 mb-1.5 block tracking-widest">Execution Environment</label>
               <div className="relative group">
-                <select 
+                <select
                   value={executionEnv}
                   onChange={(e) => setExecutionEnv(e.target.value as 'sandbox' | 'injected')}
                   className="w-full bg-[#252526] border border-[#333] hover:border-[#007acc] text-[11px] font-bold text-[#cccccc] px-3 py-2.5 rounded appearance-none transition-all cursor-pointer outline-none shadow-inner"
@@ -352,6 +557,27 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-3 text-gray-500 pointer-events-none" />
               </div>
             </div>
+
+            {executionEnv === 'injected' && isCounterHook && (
+              <label className="flex items-start gap-2.5 p-3 rounded border border-pink-500/30 bg-pink-500/5 cursor-pointer hover:bg-pink-500/10 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={useCreate2Hook}
+                  onChange={(e) => setUseCreate2Hook(e.target.checked)}
+                  className="mt-0.5 accent-pink-500"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-pink-300">
+                    <Layers className="h-3.5 w-3.5" />
+                    Uniswap v4 CREATE2
+                  </div>
+                  <p className="text-[9px] text-pink-200/70 mt-1 leading-relaxed">
+                    Mine a salt so the hook address encodes BEFORE_SWAP | AFTER_SWAP (0xc0) and deploy via the CREATE2 proxy on Sepolia.
+                    Known hook: <span className="font-mono text-pink-200/90">{getCounterHookAddress()}</span>
+                  </p>
+                </div>
+              </label>
+            )}
 
             {executionEnv === 'sandbox' && (
               <div>
@@ -399,17 +625,49 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
                   disabled={isDeploying || deployBlocked}
                   title={deployBlocked ? deployBlockedReason ?? undefined : undefined}
                   className={`w-full px-4 py-3 rounded font-bold text-xs flex flex-col items-center justify-center transition-all shadow-lg active:scale-95 group ${
-                    executionEnv === 'sandbox' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-[#007acc] hover:bg-[#0062a3]'
+                    executionEnv === 'sandbox'
+                      ? 'bg-indigo-600 hover:bg-indigo-700'
+                      : isCreate2Deploy
+                        ? 'bg-pink-600 hover:bg-pink-700'
+                        : 'bg-[#007acc] hover:bg-[#0062a3]'
                   } ${isDeploying || deployBlocked ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
                   <div className="flex items-center gap-2">
-                    {isDeploying ? <Loader className="size-4 animate-spin text-white" /> : <Rocket className="size-4 text-white group-hover:scale-110 transition-transform" />}
-                    <span>{executionEnv === 'sandbox' ? 'Deploy to Sandbox' : `Deploy to ${networkName || 'Network'}`}</span>
+                    {isDeploying ? (
+                      <Loader className="size-4 animate-spin text-white" />
+                    ) : isCreate2Deploy ? (
+                      <Layers className="size-4 text-white group-hover:scale-110 transition-transform" />
+                    ) : (
+                      <Rocket className="size-4 text-white group-hover:scale-110 transition-transform" />
+                    )}
+                    <span>{deployButtonLabel}</span>
                   </div>
                   <span className="text-[9px] opacity-60 font-medium mt-0.5">
-                    {executionEnv === 'sandbox' ? 'Instant • No Gas Required' : `Account: ${account?.slice(0, 10)}...`}
+                    {executionEnv === 'sandbox'
+                      ? 'Instant • No Gas Required'
+                      : isCreate2Deploy
+                        ? `Sepolia CREATE2 · ${account?.slice(0, 10)}…`
+                        : `Account: ${account?.slice(0, 10)}...`}
                   </span>
                 </button>
+              )}
+
+              {deployCostHint && (
+                <p className="text-[9px] text-gray-500 font-mono text-center leading-relaxed">
+                  Est. gas {clampGasLimit(gasLimit).toLocaleString()} · {deployCostHint}
+                </p>
+              )}
+
+              {create2Info && (
+                <div className="p-2.5 rounded border border-pink-500/30 bg-pink-950/20 text-[10px] font-mono text-pink-200/90 leading-relaxed">
+                  {create2Info}
+                </div>
+              )}
+
+              {bumpInfo && (
+                <div className="p-2.5 rounded border border-green-700/30 bg-green-950/20 text-[10px] font-mono text-green-300/90 leading-relaxed">
+                  {bumpInfo}
+                </div>
               )}
             </div>
 
@@ -452,7 +710,7 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
             </span>
             {expandedSections.has('details') ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
-          
+
           {expandedSections.has('details') && (
             <div className="p-4 space-y-4 bg-[#1a1a1a]">
               <div>

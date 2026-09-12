@@ -22,6 +22,13 @@ export interface AuditSession {
   auditSource: string | null;
   sourceHash: string | null;
   ideReport: SecurityReport | null;
+  /** Last Continuity Graph verify snapshot (post-deploy Indexed). */
+  graphVerify?: {
+    contractAddress: string;
+    registered: boolean;
+    summary: string;
+    at: number;
+  } | null;
 }
 
 export function emptyAuditSession(): AuditSession {
@@ -31,6 +38,7 @@ export function emptyAuditSession(): AuditSession {
     auditSource: null,
     sourceHash: null,
     ideReport: null,
+    graphVerify: null,
   };
 }
 
@@ -70,6 +78,7 @@ export function restoreAuditSession(input: {
   auditSource: string | null;
   sourceHash: string | null;
   ideReport: SecurityReport | null;
+  graphVerify?: AuditSession['graphVerify'];
 }): AuditSession {
   return {
     files: input.files ?? [],
@@ -77,7 +86,15 @@ export function restoreAuditSession(input: {
     auditSource: input.auditSource,
     sourceHash: input.sourceHash,
     ideReport: input.ideReport,
+    graphVerify: input.graphVerify ?? null,
   };
+}
+
+export function bindGraphVerify(
+  session: AuditSession,
+  graphVerify: NonNullable<AuditSession['graphVerify']>
+): AuditSession {
+  return { ...session, graphVerify };
 }
 
 export function getProblemAudit(session: AuditSession): SecurityReport | null {

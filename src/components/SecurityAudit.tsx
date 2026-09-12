@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { SecurityReport } from '../utils/securityScanner';
 import { ShieldCheck, ShieldAlert, ShieldX, Info, CheckCircle2, AlertTriangle, ExternalLink, Zap, ClipboardCheck, Lock, Loader2, type LucideIcon } from 'lucide-react';
 import SecurityChecklist from './SecurityChecklist';
-import { requestCreAudit, getCachedCreVerdict, type CreAuditResult } from '../utils/creClient';
+import { requestCreAudit, getCachedCreVerdict, pollCreExecution, storeCreVerdict, type CreAuditResult } from '../utils/creClient';
 import { isCreGateEnabled, getCreConsumerAddress, getCreWorkflowId } from '../utils/creConstants';
 import { recordCreVerdictOnchain } from '../utils/creConsumer';
 import { useWeb3 } from '../context/Web3Context';
 import { getErrorMessage } from '../utils/errorMessage';
-import { loadGraphAuditContext, type GraphAuditContext } from '../utils/graphContext';
+import { loadGraphAuditContext, graphSuggestsManualReview, type GraphAuditContext } from '../utils/graphContext';
 
 type AuditTab = 'automated' | 'checklist' | 'confidential';
 
@@ -148,12 +148,35 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
     setCreError(null);
     setRecordTx(null);
     try {
-      const result = await requestCreAudit({
+      let result = await requestCreAudit({
         sourceCode,
         sourceHash,
         network,
         ideReport: report,
       });
+      // Live accepted: try verdict polling groundwork (no-op until proxy wires GET)
+      if (result.mode === 'accepted' && result.executionId && !result.gateable) {
+        const polled = await pollCreExecution(result.executionId, {
+          timeoutMs: 12_000,
+          intervalMs: 3_000,
+        });
+        if (polled) result = polled;
+      }
+      // Soft UX: Graph history suggesting DENY while ALLOW → surface MANUAL_REVIEW note via reason
+      if (
+        result.verdict === 'ALLOW' &&
+        result.gateable &&
+        graphSuggestsManualReview(graphCtx)
+      ) {
+        result = {
+          ...result,
+          verdict: 'MANUAL_REVIEW',
+          verdictCode: 3,
+          reason: `${result.reason} · Indexed history suggests prior DENY — manual review recommended`,
+          ideReconciled: result.ideReconciled,
+        };
+        storeCreVerdict(result);
+      }
       setCreResult(result);
     } catch (e) {
       setCreError(e instanceof Error ? e.message : String(e));
@@ -341,7 +364,12 @@ const SecurityAudit: React.FC<SecurityAuditProps> = ({
                 )}
                 {!contractAddress && (
                   <p className="text-[9px] text-gray-600">
-                    Tip: promote or deploy to Sepolia, then open Interact so this panel can query ValueChanged.
+                    Tip: promote or deploy to Sepolia, then open Interact so this panel can query Indexed history.
+                  </p>
+                )}
+                {graphSuggestsManualReview(graphCtx) && (
+                  <p className="text-[10px] text-amber-300/90 border border-amber-500/25 bg-amber-500/10 rounded p-2">
+                    Indexed history suggests prior DENY / risk — prefer MANUAL_REVIEW before live deploy.
                   </p>
                 )}
               </div>

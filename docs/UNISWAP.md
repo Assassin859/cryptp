@@ -9,7 +9,8 @@ Continuity upgrade: Aethon’s existing **edit → compile → sandbox → Sepol
 3. Compile (WASM).
 4. Sandbox deploy: constructor arg = any non-zero address (e.g. Sepolia PoolManager below, or your wallet for `demoCountAsPoolManager`).
 5. Call **`sandboxBumpAfterSwap()`** in Interact to bump `afterSwapCount` (Continuity demo helper).
-6. Optional live deploy: `npm run deploy:counter-hook` (Hardhat Sepolia).
+6. **Live CREATE2 (IDE):** switch Execution Environment to MetaMask → leave **Uniswap v4 CREATE2** checked → deploy. Aethon mines the salt in-browser, deploys via the CREATE2 proxy, saves the address (`getCounterHookAddress`), and calls `sandboxBumpAfterSwap` as proof.
+7. Optional CLI: `npm run deploy:counter-hook` (Hardhat Sepolia) — same miner.
 
 ## Contracts & addresses
 
@@ -25,7 +26,7 @@ Optional env: `VITE_UNISWAP_COUNTER_HOOK`, `UNISWAP_V4_POOL_MANAGER`.
 
 ## CREATE2 flags
 
-Live Uniswap v4 PoolManager only calls hooks whose **address encodes permission flags**. `npm run deploy:counter-hook` mines a salt via [`scripts/hookMiner.ts`](../scripts/hookMiner.ts) and deploys through the CREATE2 Deployer Proxy (`0x4e59…56c`) so the address has `BEFORE_SWAP | AFTER_SWAP` (`0xc0`).
+Live Uniswap v4 PoolManager only calls hooks whose **address encodes permission flags**. IDE Output **Uniswap v4 CREATE2** (and `npm run deploy:counter-hook`) mines a salt via [`src/utils/hookMiner.ts`](../src/utils/hookMiner.ts) / [`scripts/hookMiner.ts`](../scripts/hookMiner.ts) and deploys through the CREATE2 Deployer Proxy (`0x4e59…56c`) so the address has `BEFORE_SWAP | AFTER_SWAP` (`0xc0`).
 
 This educational hook uses **self-contained stubs** so browser solc works without vendoring `v4-core`. Production hooks should inherit `BaseHook` from v4-periphery.
 

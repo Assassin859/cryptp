@@ -17,3 +17,25 @@ type ValueChanged @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
+
+type HookAfterSwap @entity(immutable: true) {
+  id: Bytes!
+  contract: Bytes!
+  caller: Bytes!
+  newCount: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type VerdictReceived @entity(immutable: true) {
+  id: Bytes!
+  contract: Bytes!
+  verdictCode: Int!
+  riskMask: Int!
+  sourceHash: Bytes!
+  reporter: Bytes!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}

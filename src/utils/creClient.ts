@@ -251,3 +251,67 @@ export async function requestCreAudit(req: CreAuditRequest): Promise<CreAuditRes
   storeCreVerdict(reconciled);
   return reconciled;
 }
+
+/**
+ * Groundwork: poll live CRE execution until a gateable verdict exists.
+ * Until the proxy implements GET /cre/execution/:id, returns null after timeout
+ * with a clear reason (stub remains the gateable path).
+ */
+export async function pollCreExecution(
+  executionId: string,
+  opts?: { timeoutMs?: number; intervalMs?: number }
+): Promise<CreAuditResult | null> {
+  if (!executionId?.trim()) return null;
+  if (!isCreConfigured()) {
+    throw new CreClientError('CRE trigger URL not configured', 'not_configured');
+  }
+  const timeoutMs = opts?.timeoutMs ?? 60_000;
+  const intervalMs = opts?.intervalMs ?? 3_000;
+  const base = getCreTriggerUrl().replace(/\/$/, '');
+  const url = `${base}/execution/${encodeURIComponent(executionId)}`;
+  const start = Date.now();
+  const headers: Record<string, string> = {};
+  const auditToken = getCreAuditToken();
+  if (auditToken) headers.Authorization = `Bearer ${auditToken}`;
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(url, { headers });
+      if (res.status === 404) {
+        // Endpoint not wired yet — stop early
+        return null;
+      }
+      if (res.ok) {
+        const body = (await res.json()) as Partial<CreAuditResult> & { pending?: boolean };
+        if (body.pending) {
+          await new Promise((r) => setTimeout(r, intervalMs));
+          continue;
+        }
+        if (
+          body.verdict === 'ALLOW' ||
+          body.verdict === 'DENY' ||
+          body.verdict === 'MANUAL_REVIEW'
+        ) {
+          const result: CreAuditResult = {
+            verdict: body.verdict,
+            verdictCode: body.verdictCode ?? (body.verdict === 'ALLOW' ? 1 : body.verdict === 'DENY' ? 2 : 3),
+            riskMask: body.riskMask ?? 0,
+            reason: body.reason || 'Live CRE verdict',
+            sourceHash: normalizeHash(body.sourceHash || ''),
+            mode: 'live',
+            executionId,
+            confidential: body.confidential !== false,
+            gateable: body.gateable === true,
+            at: body.at || Date.now(),
+          };
+          if (result.gateable) storeCreVerdict(result);
+          return result;
+        }
+      }
+    } catch {
+      /* retry */
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return null;
+}

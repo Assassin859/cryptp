@@ -15,12 +15,10 @@ Do **not** add Graph event rows to Supabase. `deployments` rows are for IDE repl
 
 ## User flow (stay in Aethon)
 
-1. Compile and deploy **SimpleStorage** to Sepolia (MetaMask).
-2. When prompted, choose **Open Indexed** (or open the **Indexed** activity icon).
-3. Click **Register for indexing** (one MetaMask tx to `CryptPIndexRegistry`).
-4. In **Interaction**, call `setValue`.
-5. Back in **Indexed**, click **Refresh** to see `ValueChanged` rows from The Graph.
-6. **Problem Audit → Confidential** also loads The Graph context for the active Sepolia contract (registration + latest `ValueChanged` events) so Continuity audit UX uses live indexed data—not only a history table.
+1. Compile and deploy a Continuity-indexable contract to Sepolia (SimpleStorage, CounterHook, or AuditFirewallConsumer).
+2. With **auto-register** (default), Aethon registers via `CryptPIndexRegistry` and waits for **IndexedContract** (Continuity verify). Or open **Indexed** and register manually.
+3. For SimpleStorage: call `setValue`, then **Refresh** for `ValueChanged` rows.
+4. **Problem Audit → Confidential** loads The Graph context for the active Sepolia contract.
 
 Default path uses the Aethon platform endpoint (`VITE_GRAPH_*`). No Studio account required for that path.
 

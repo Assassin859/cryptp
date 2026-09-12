@@ -212,3 +212,23 @@ export async function handleCreAuditRequest(body, env = process.env) {
 
   return { ...evaluateDeployPolicyStub(input), gateable: true, at: Date.now() };
 }
+
+/**
+ * Groundwork: live execution poll. Returns pending until CRE result wiring exists.
+ */
+export function handleCreExecutionPoll(executionId) {
+  if (!executionId) {
+    const err = new Error('Missing executionId');
+    err.statusCode = 400;
+    throw err;
+  }
+  return {
+    pending: true,
+    executionId,
+    reason:
+      'CRE execution polling groundwork — no gateable verdict yet. Use Stub mode for deploy unlock.',
+    gateable: false,
+    mode: 'accepted',
+    at: Date.now(),
+  };
+}

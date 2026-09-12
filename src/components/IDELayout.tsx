@@ -64,7 +64,9 @@ import GasProfiler from './GasProfiler';
 import DocsSidebar from './DocsSidebar';
 import ConfirmModal from './ConfirmModal';
 import GraphHistoryPanel from './GraphHistoryPanel';
-import { abiLooksLikeSimpleStorage, setGraphUserPrefs } from '../utils/graphConstants';
+import { abiLooksLikeGraphIndexable, getGraphUserPrefs, resolveRegisterKind, setGraphUserPrefs } from '../utils/graphConstants';
+import { isGraphRegisterConfigured, waitForIndexedContract } from '../utils/graphClient';
+import { registerContractForIndexing } from '../utils/graphRegister';
 import InputModal from './InputModal';
 import AethonTerminal from './AethonTerminal';
 import { BrandLogo } from './BrandLogo';
@@ -83,6 +85,7 @@ import {
   toCacheSlice,
   fromCacheSlice,
   allowsLiveDeploy,
+  bindGraphVerify,
   type AuditSession,
 } from '../utils/auditSession';
 import { 
@@ -870,14 +873,68 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
 
     const isSepoliaLive =
       withMeta.isRealChain === true && /sepolia/i.test(withMeta.network || '');
-    const canOfferGraph =
-      isSepoliaLive && abiLooksLikeSimpleStorage(withMeta.abi);
+    const kind = resolveRegisterKind(withMeta.abi);
+    const canOfferGraph = isSepoliaLive && Boolean(kind) && abiLooksLikeGraphIndexable(withMeta.abi);
+    const prefs = getGraphUserPrefs();
 
-    if (canOfferGraph) {
+    if (canOfferGraph && prefs.autoRegister && isGraphRegisterConfigured() && signer) {
+      void (async () => {
+        try {
+          const reg = await registerContractForIndexing({
+            signer,
+            contractAddress: withMeta.contractAddress,
+            abi: withMeta.abi,
+          });
+          setConfirmModal({
+            title: 'Continuity verify — The Graph',
+            message: reg.alreadyRegistered
+              ? 'Already registered. Waiting for IndexedContract in The Graph…'
+              : `Registered (${reg.txHash.slice(0, 10)}…). Waiting for Indexed proof…`,
+            confirmLabel: 'Open Indexed',
+            isDangerous: false,
+            onConfirm: () => {
+              setHighlightGraphRegister(true);
+              setActiveActivity('graph');
+              setShowSideBar(true);
+            },
+          });
+          const indexed = await waitForIndexedContract(withMeta.contractAddress, {
+            timeoutMs: 90_000,
+            intervalMs: 4_000,
+          });
+          applyAuditSession(
+            bindGraphVerify(auditSessionRef.current, {
+              contractAddress: withMeta.contractAddress,
+              registered: Boolean(indexed),
+              summary: indexed
+                ? `Indexed at block ${indexed.blockNumber} · Continuity verify OK`
+                : 'Register tx sent; Indexed not visible yet (subgraph lag or Studio not synced)',
+              at: Date.now(),
+            })
+          );
+        } catch (e) {
+          console.warn('Graph auto-register failed', e);
+          setConfirmModal({
+            title: 'Index with The Graph?',
+            message:
+              'Auto-register failed. Open Indexed to register manually so Continuity can verify this Sepolia deployment.',
+            confirmLabel: 'Open Indexed',
+            isDangerous: false,
+            onConfirm: () => {
+              setHighlightGraphRegister(true);
+              setActiveActivity('graph');
+              setShowSideBar(true);
+            },
+          });
+        }
+      })();
+      setActiveActivity('interact');
+      setShowSideBar(true);
+    } else if (canOfferGraph) {
       setConfirmModal({
         title: 'Index with The Graph?',
         message:
-          'Register this Sepolia contract so Aethon can index ValueChanged events. Default: Aethon platform subgraph. Optional: use your own Graph Studio URL under Indexed or Settings.',
+          'Register this Sepolia contract so Aethon can verify Continuity via IndexedContract (SimpleStorage / CounterHook / AuditFirewall). Default: auto-register is on in Graph prefs.',
         confirmLabel: 'Open Indexed',
         isDangerous: false,
         onConfirm: () => {

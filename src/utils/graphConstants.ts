@@ -1,12 +1,17 @@
 /**
- * Shared constants for Aethon ↔ The Graph indexing (SimpleStorage kind).
+ * Shared constants for Aethon ↔ The Graph indexing.
  * User Studio prefs: `aethon-graph-keys` (legacy `cryptp-graph-keys` still read).
  */
 import { id } from 'ethers';
 import { lsGet, lsSet, lsRemove } from './aethonStorage';
+import { abiLooksLikeCounterHook } from './hookMiner';
 
 /** keccak256("SimpleStorage") — matches CryptPIndexRegistry.KIND_SIMPLE_STORAGE */
 export const KIND_SIMPLE_STORAGE = id('SimpleStorage');
+/** keccak256("CounterHook") — Continuity Uniswap hook */
+export const KIND_COUNTER_HOOK = id('CounterHook');
+/** keccak256("AuditFirewallConsumer") — CRE verdict consumer */
+export const KIND_AUDIT_FIREWALL = id('AuditFirewallConsumer');
 
 export const REGISTRY_ABI = [
   'function register(address contractAddress, bytes32 kind) external',
@@ -29,12 +34,15 @@ export interface GraphUserPrefs {
   mode: GraphSourceMode;
   endpoint: string;
   registry: string;
+  /** When true, Sepolia deploys auto-register without a confirm modal. */
+  autoRegister: boolean;
 }
 
 const DEFAULT_PREFS: GraphUserPrefs = {
   mode: 'platform',
   endpoint: '',
   registry: '',
+  autoRegister: true,
 };
 
 function notifyGraphPrefsChanged(): void {
@@ -57,6 +65,7 @@ function migrateLegacyPrefs(): GraphUserPrefs | null {
       mode: modeRaw === 'studio' ? 'studio' : 'platform',
       endpoint,
       registry,
+      autoRegister: true,
     };
     lsSet(GRAPH_KEYS_STORAGE, JSON.stringify(prefs));
     localStorage.removeItem(LEGACY_MODE);
@@ -80,6 +89,7 @@ export function getGraphUserPrefs(): GraphUserPrefs {
       mode: parsed.mode === 'studio' ? 'studio' : 'platform',
       endpoint: (parsed.endpoint || '').trim(),
       registry: (parsed.registry || '').trim(),
+      autoRegister: parsed.autoRegister !== false,
     };
   } catch {
     return { ...DEFAULT_PREFS };
@@ -87,14 +97,14 @@ export function getGraphUserPrefs(): GraphUserPrefs {
 }
 
 export function setGraphUserPrefs(prefs: Partial<GraphUserPrefs>): GraphUserPrefs {
+  const cur = getGraphUserPrefs();
   const next: GraphUserPrefs = {
-    ...getGraphUserPrefs(),
+    ...cur,
     ...prefs,
-    endpoint: (prefs.endpoint ?? getGraphUserPrefs().endpoint).trim(),
-    registry: (prefs.registry ?? getGraphUserPrefs().registry).trim(),
-    mode: prefs.mode === 'studio' || prefs.mode === 'platform'
-      ? prefs.mode
-      : getGraphUserPrefs().mode,
+    endpoint: (prefs.endpoint ?? cur.endpoint).trim(),
+    registry: (prefs.registry ?? cur.registry).trim(),
+    mode: prefs.mode === 'studio' || prefs.mode === 'platform' ? prefs.mode : cur.mode,
+    autoRegister: prefs.autoRegister !== undefined ? prefs.autoRegister : cur.autoRegister,
   };
   try {
     lsSet(GRAPH_KEYS_STORAGE, JSON.stringify(next));
@@ -174,4 +184,27 @@ export function abiLooksLikeSimpleStorage(abi: unknown): boolean {
       inputs[1]?.type === 'uint256'
     );
   });
+}
+
+export function abiLooksLikeAuditFirewall(abi: unknown): boolean {
+  if (!Array.isArray(abi)) return false;
+  const names = new Set(
+    abi
+      .filter((x): x is { type?: string; name?: string } => !!x && typeof x === 'object')
+      .filter((x) => x.type === 'function' || x.type === 'event')
+      .map((x) => x.name || '')
+  );
+  return names.has('recordVerdict') && names.has('VerdictReceived');
+}
+
+/** Kind bytes32 for registry.register, or null if ABI is not Continuity-indexable. */
+export function resolveRegisterKind(abi: unknown): string | null {
+  if (abiLooksLikeSimpleStorage(abi)) return KIND_SIMPLE_STORAGE;
+  if (abiLooksLikeCounterHook(abi)) return KIND_COUNTER_HOOK;
+  if (abiLooksLikeAuditFirewall(abi)) return KIND_AUDIT_FIREWALL;
+  return null;
+}
+
+export function abiLooksLikeGraphIndexable(abi: unknown): boolean {
+  return resolveRegisterKind(abi) != null;
 }

@@ -3,6 +3,7 @@ import { Database, RefreshCw, Link2, AlertCircle, ExternalLink, Settings2 } from
 import { Contract } from 'ethers';
 import { useWeb3 } from '../context/Web3Context';
 import {
+  abiLooksLikeGraphIndexable,
   abiLooksLikeSimpleStorage,
   getCustomGraphEndpoint,
   getCustomGraphRegistryAddress,
@@ -10,7 +11,7 @@ import {
   getGraphRegistryAddress,
   getGraphSourceMode,
   getPlatformGraphEndpoint,
-  KIND_SIMPLE_STORAGE,
+  resolveRegisterKind,
   REGISTRY_ABI,
   setCustomGraphEndpoint,
   setCustomGraphRegistryAddress,
@@ -79,7 +80,8 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
     Boolean(address) &&
     isRealChain &&
     isSepoliaNetwork(network) &&
-    abiLooksLikeSimpleStorage(abi);
+    abiLooksLikeGraphIndexable(abi);
+  const registerKind = resolveRegisterKind(abi);
 
   // Force re-read of endpoint/registry after Save Studio / mode toggle
   void configTick;
@@ -166,11 +168,16 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
     setStatus(null);
     try {
       const registry = new Contract(registryAddress, REGISTRY_ABI, signer);
-      const tx = await registry.register(address, KIND_SIMPLE_STORAGE);
+      const kind = registerKind;
+      if (!kind) {
+        setError('ABI is not Continuity-indexable.');
+        return;
+      }
+      const tx = await registry.register(address, kind);
       setStatus(`Register tx submitted: ${tx.hash.slice(0, 10)}…`);
       await tx.wait();
       setRegistered(true);
-      setStatus('Registered. The Graph will index new ValueChanged events shortly.');
+      setStatus('Registered. Waiting for IndexedContract (Continuity verify)…');
       onRegistered?.();
       setTimeout(() => void refresh(), 4000);
     } catch (e) {
@@ -308,14 +315,14 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
     );
   }
 
-  if (!abiLooksLikeSimpleStorage(abi)) {
+  if (!abiLooksLikeGraphIndexable(abi)) {
     return (
       <div className="flex flex-col h-full text-xs">
         <div className="p-4 border-b border-[#2d2d2d]">{studioSettingsBlock}</div>
         <div className="p-4 space-y-2 text-gray-400">
           <p>
-            This ABI is not a SimpleStorage <code className="text-gray-300">ValueChanged</code> contract.
-            First release indexes SimpleStorage only.
+            This ABI is not Continuity-indexable. Supported kinds: SimpleStorage{' '}
+            <code className="text-gray-300">ValueChanged</code>, CounterHook, AuditFirewallConsumer.
           </p>
         </div>
       </div>
@@ -384,7 +391,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
         <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">
-          ValueChanged ({rows.length})
+          {abiLooksLikeSimpleStorage(abi) ? `ValueChanged (${rows.length})` : `Indexed status · events (${rows.length})`}
         </p>
         {rows.length === 0 ? (
           <p className="text-gray-600 italic text-[11px] p-2">No indexed events yet.</p>

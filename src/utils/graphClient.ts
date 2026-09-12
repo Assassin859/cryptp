@@ -141,3 +141,31 @@ export function isGraphConfigured(): boolean {
 export function isGraphRegisterConfigured(): boolean {
   return Boolean(getGraphEndpoint() && getGraphRegistryAddress());
 }
+
+/**
+ * Poll until IndexedContract appears (Continuity verify wait).
+ * Returns the row or null on timeout.
+ */
+export async function waitForIndexedContract(
+  contractAddress: string,
+  opts?: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal }
+): Promise<IndexedContractRow | null> {
+  const timeoutMs = opts?.timeoutMs ?? 90_000;
+  const intervalMs = opts?.intervalMs ?? 4_000;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (opts?.signal?.aborted) return null;
+    try {
+      const row = await fetchIndexedContract(contractAddress);
+      if (row) return row;
+    } catch {
+      /* keep polling */
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  try {
+    return await fetchIndexedContract(contractAddress);
+  } catch {
+    return null;
+  }
+}

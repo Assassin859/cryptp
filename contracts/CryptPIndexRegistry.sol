@@ -8,6 +8,8 @@ pragma solidity ^0.8.20;
  */
 contract CryptPIndexRegistry {
     bytes32 public constant KIND_SIMPLE_STORAGE = keccak256("SimpleStorage");
+    bytes32 public constant KIND_COUNTER_HOOK = keccak256("CounterHook");
+    bytes32 public constant KIND_AUDIT_FIREWALL = keccak256("AuditFirewallConsumer");
 
     event ContractRegistered(
         address indexed contractAddress,

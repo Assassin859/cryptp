@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import solc from 'solc';
 import { resolveImports } from './resolveImports.mjs';
-import { handleCreAuditRequest } from './cre-proxy.mjs';
+import { handleCreAuditRequest, handleCreExecutionPoll } from './cre-proxy.mjs';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -70,6 +70,17 @@ app.get('/health', (req, res) => {
 app.post('/cre/audit', requireCreAuditAuth, async (req, res) => {
   try {
     const result = await handleCreAuditRequest(req.body || {}, process.env);
+    res.json(result);
+  } catch (e) {
+    const status = typeof e?.statusCode === 'number' ? e.statusCode : 500;
+    res.status(status).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+/** Live CRE execution poll groundwork (pending until verdict wiring exists). */
+app.get('/cre/audit/execution/:executionId', requireCreAuditAuth, (req, res) => {
+  try {
+    const result = handleCreExecutionPoll(req.params.executionId);
     res.json(result);
   } catch (e) {
     const status = typeof e?.statusCode === 'number' ? e.statusCode : 500;
