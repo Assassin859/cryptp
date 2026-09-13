@@ -1,0 +1,14 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": false, "internalType": "uint8", "name": "verdictCode", "type": "uint8" },
+      { "indexed": false, "internalType": "uint8", "name": "riskMask", "type": "uint8" },
+      { "indexed": true, "internalType": "bytes32", "name": "sourceHash", "type": "bytes32" },
+      { "indexed": false, "internalType": "uint64", "name": "chainSelector", "type": "uint64" },
+      { "indexed": true, "internalType": "address", "name": "reporter", "type": "address" }
+    ],
+    "name": "VerdictReceived",
+    "type": "event"
+  }
+]

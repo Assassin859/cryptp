@@ -98,19 +98,22 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
           .eq('user_id', user.id)
           .maybeSingle();
         const gp = data?.graph_prefs as Partial<GraphUserPrefs> | null;
-        if (gp && typeof gp === 'object' && (gp.endpoint || gp.registry || gp.mode)) {
+        if (gp && typeof gp === 'object' && (gp.endpoint || gp.registry || gp.mode || gp.autoRegister !== undefined)) {
           const applied = setGraphUserPrefs({
             mode: gp.mode === 'studio' ? 'studio' : 'platform',
             endpoint: typeof gp.endpoint === 'string' ? gp.endpoint : '',
             registry: typeof gp.registry === 'string' ? gp.registry : '',
+            autoRegister: gp.autoRegister !== false,
           });
           setGraphMode(applied.mode);
           setGraphEndpoint(applied.endpoint);
           setGraphRegistry(applied.registry);
+          setGraphAutoRegister(applied.autoRegister);
         } else {
           setGraphMode(getGraphSourceMode());
           setGraphEndpoint(getCustomGraphEndpoint());
           setGraphRegistry(getCustomGraphRegistryAddress());
+          setGraphAutoRegister(getGraphUserPrefs().autoRegister);
         }
 
         const cp = data?.cre_prefs as Partial<CreUserPrefs> | null;
@@ -132,6 +135,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
         setGraphMode(getGraphSourceMode());
         setGraphEndpoint(getCustomGraphEndpoint());
         setGraphRegistry(getCustomGraphRegistryAddress());
+        setGraphAutoRegister(getGraphUserPrefs().autoRegister);
       }
     })();
     
@@ -144,6 +148,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
   const [graphMode, setGraphMode] = useState<GraphSourceMode>(() => getGraphSourceMode());
   const [graphEndpoint, setGraphEndpoint] = useState(() => getCustomGraphEndpoint());
   const [graphRegistry, setGraphRegistry] = useState(() => getCustomGraphRegistryAddress());
+  const [graphAutoRegister, setGraphAutoRegister] = useState(() => getGraphUserPrefs().autoRegister);
   const [graphSavedFlash, setGraphSavedFlash] = useState(false);
 
   const [creGateEnabled, setCreGateEnabled] = useState(() => getCreUserPrefs().gateEnabled);
@@ -158,6 +163,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
       mode: graphMode,
       endpoint: graphEndpoint,
       registry: graphRegistry,
+      autoRegister: graphAutoRegister,
     });
     setGraphSavedFlash(true);
     window.setTimeout(() => setGraphSavedFlash(false), 2000);
@@ -219,6 +225,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
          mode: graphMode,
          endpoint: graphEndpoint,
          registry: graphRegistry,
+         autoRegister: graphAutoRegister,
        });
        window.dispatchEvent(new Event('storage'));
 
@@ -613,6 +620,17 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ user, onSignOut, onBe
                   className="w-full bg-[#1e1e1e] border border-[#333] rounded p-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
+              <label className="flex items-start gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={graphAutoRegister}
+                  onChange={(e) => setGraphAutoRegister(e.target.checked)}
+                  className="mt-0.5 accent-[#007acc]"
+                />
+                <span className="text-[10px] text-gray-400 leading-snug">
+                  Auto-register Sepolia deploys with The Graph (IndexedContract Continuity verify). Turn off to confirm manually from Indexed.
+                </span>
+              </label>
               <button
                 type="button"
                 onClick={saveGraphPrefs}

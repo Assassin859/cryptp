@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DEFAULT_GAS_LIMIT, MIN_GAS_LIMIT, MAX_GAS_LIMIT } from '../constants/gas';
 import { Play, Search, Zap, Activity, AlertCircle, Info, User, RefreshCw, ChevronDown, ChevronUp, Fuel, List, Terminal, Sparkles } from 'lucide-react';
 
@@ -7,6 +7,8 @@ import { browserVM, EventLog, GasReport } from '../utils/browserVM';
 import { useWeb3 } from '../context/Web3Context';
 import { isAbiFunction, asAbiArray, abiFunctionKey, isReadFunction, type AbiFragment } from '../types/abi';
 import { getErrorMessage } from '../utils/errorMessage';
+import { abiLooksLikeCounterHook } from '../utils/hookMiner';
+import { getCounterHookAddress } from '../utils/uniswapConstants';
 
 
 interface ContractInteractionProps {
@@ -38,6 +40,15 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
 }) => {
   const { signer, isConnected } = useWeb3();
   type CallableAbi = AbiFragment & { type: 'function'; name: string; stateMutability?: string; constant?: boolean; inputs?: { name?: string; type: string }[] };
+  const isCounterHook = useMemo(() => abiLooksLikeCounterHook(abi), [abi]);
+  const isLocalNetwork = /local|simulation/i.test(network || '');
+  /** Prefer stored CREATE2 / prefs hook address for live CounterHook Continuity. */
+  const effectiveAddress = useMemo(() => {
+    if (isCounterHook && !isLocalNetwork) {
+      return getCounterHookAddress();
+    }
+    return address;
+  }, [isCounterHook, isLocalNetwork, address]);
   const [readFunctions, setReadFunctions] = useState<CallableAbi[]>([]);
   const [writeFunctions, setWriteFunctions] = useState<CallableAbi[]>([]);
   const [expandedFunctions, setExpandedFunctions] = useState<{ [key: string]: boolean }>({});
@@ -169,7 +180,25 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           return lower === 'true';
         }
 
-        if (input.type.includes('[]') || input.type.startsWith('bytes') || input.type.includes('tuple')) {
+        if (input.type === 'address') {
+          if (!/^0x[0-9a-fA-F]{40}$/.test(val)) {
+            throw new Error(`Invalid address for ${argKey}: "${val}"`);
+          }
+          return val;
+        }
+
+        // bytes / bytesN: accept 0x-hex directly; arrays/tuples stay JSON.
+        if (input.type === 'bytes' || /^bytes\d+$/.test(input.type)) {
+          if (val === '' || val === '0x') return '0x';
+          if (/^0x[0-9a-fA-F]*$/.test(val)) return val;
+          try {
+            return JSON.parse(val);
+          } catch {
+            throw new Error(`Invalid bytes for ${argKey}: use 0x… hex or JSON`);
+          }
+        }
+
+        if (input.type.includes('[]') || input.type.includes('tuple')) {
            try {
               return JSON.parse(val);
            } catch {
@@ -180,18 +209,19 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         return val;
       });
 
-      // Prefer the exact fragment so overloaded functions encode correctly.
-      const data = iface.encodeFunctionData(func as never, processedArgs);
+      // ethers v6: encode by signature string — passing a raw ABI object throws
+      // "invalid BytesLike value … value=null".
+      const data = iface.encodeFunctionData(funcKey, processedArgs);
 
       if (network === 'Local Simulation') {
         if (isRead) {
-          const { returnValue, gasUsed } = await browserVM.runCall(address, data);
+          const { returnValue, gasUsed } = await browserVM.runCall(effectiveAddress, data);
           
           if (returnValue === '0x' || !returnValue) {
             throw new Error("Empty return data (0x). This usually means the contract is not deployed at this address, or the function has no return value but the ABI expects one.");
           }
 
-          const decoded = iface.decodeFunctionResult(func as never, returnValue);
+          const decoded = iface.decodeFunctionResult(funcKey, returnValue);
           const rawValue = decoded.length === 1 ? decoded[0] : decoded;
 
           setResults(prev => ({ 
@@ -208,7 +238,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           const ethValue = inputs[funcKey]?._value || '0';
           const weiValue = parseEther(ethValue || '0');
           const safeGasLimit = clampGasLimit(txGasLimit);
-          const { transactionHash, gasReport, logs } = await browserVM.sendTransaction(address, data, weiValue, safeGasLimit);
+          const { transactionHash, gasReport, logs } = await browserVM.sendTransaction(effectiveAddress, data, weiValue, safeGasLimit);
           setResults(prev => ({ 
             ...prev, 
             [funcKey]: { txHash: transactionHash, gasReport, logs, loading: false } 
@@ -218,7 +248,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             onTransactionExecuted({
               txHash: transactionHash,
               callData: data,
-              contractAddress: address,
+              contractAddress: effectiveAddress,
               gasUsed: gasReport.total,
               callValueWei: weiValue.toString(),
               gasLimit: safeGasLimit,
@@ -231,10 +261,11 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           throw new Error('Please connect your wallet to interact with this contract on a real network.');
         }
 
-        const contract = new Contract(address, asAbiArray(abi), signer);
+        const contract = new Contract(effectiveAddress, asAbiArray(abi), signer);
+        const method = contract.getFunction(funcKey);
         
         if (isRead) {
-          const result = await contract.getFunction(funcKey)(...processedArgs);
+          const result = await method(...processedArgs);
           setResults(prev => ({ 
             ...prev, 
             [funcKey]: { 
@@ -248,10 +279,11 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           const ethValue = inputs[funcKey]?._value || '0';
           const weiValue = parseEther(ethValue || '0');
           const safeGasLimit = clampGasLimit(txGasLimit);
-          const tx = await contract.getFunction(funcKey)(...processedArgs, {
-            value: weiValue,
-            gasLimit: safeGasLimit,
-          });
+          const overrides = { value: weiValue, gasLimit: safeGasLimit };
+          const tx =
+            processedArgs.length === 0
+              ? await method(overrides)
+              : await method(...processedArgs, overrides);
           setResults(prev => ({ 
             ...prev, 
             [funcKey]: { txHash: tx.hash, loading: true } 
@@ -271,7 +303,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             onTransactionExecuted({
               txHash: tx.hash,
               callData: data,
-              contractAddress: address,
+              contractAddress: effectiveAddress,
               gasUsed,
               callValueWei: weiValue.toString(),
               gasLimit: safeGasLimit,
@@ -474,7 +506,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                         <div 
                           onClick={(e) => {
                             e.stopPropagation();
-                            onQueryAI?.(`Please help me optimize the gas usage for function "${func.name}" in contract "${address}". Recent gas used: ${result.gasReport?.total}.`);
+                            onQueryAI?.(`Please help me optimize the gas usage for function "${func.name}" in contract "${effectiveAddress}". Recent gas used: ${result.gasReport?.total}.`);
                           }}
                           className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-[8px] text-blue-400 hover:bg-blue-500/20 flex items-center gap-1 transition-all pointer-events-auto"
                         >
@@ -598,8 +630,18 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             </h4>
             <div className="bg-gray-900 border border-gray-800 rounded p-2 flex items-center gap-2">
               <User className="h-3.5 w-3.5 text-gray-500" />
-              <span className="text-xs font-mono text-blue-400 select-all">{address}</span>
+              <span className="text-xs font-mono text-blue-400 select-all">{effectiveAddress}</span>
             </div>
+            {isCounterHook && !isLocalNetwork && address.toLowerCase() !== effectiveAddress.toLowerCase() && (
+              <p className="text-[10px] text-pink-300/80">
+                Using CounterHook pref {effectiveAddress.slice(0, 10)}… (deployment was {address.slice(0, 10)}…)
+              </p>
+            )}
+            {isCounterHook && !isLocalNetwork && (
+              <p className="text-[10px] text-gray-500">
+                Pref from Output CREATE2 / Settings Continuity hook address.
+              </p>
+            )}
           </div>
 
           {/* Gas Limit for write transactions */}

@@ -42,7 +42,7 @@ import {
   type DeploymentKind,
 } from '../utils/userData';
 import { rehydrateSandboxFromDb } from '../utils/sandboxRehydrate';
-import { parseConstructorArgsFromAbi, abiHasConstructorArgs } from '../utils/constructorArgs';
+import { parseConstructorArgsFromAbi, abiHasConstructorArgs, parseConstructorArgs, constructorArgKey, type ConstructorInput } from '../utils/constructorArgs';
 import { compileWithHardhat, CompilationResult } from '../utils/hardhatCompiler';
 import { allTemplates, simpleStorageTemplate } from '../utils/contractTemplates';
 import { SimulatedDeployment } from '../types';
@@ -64,10 +64,14 @@ import GasProfiler from './GasProfiler';
 import DocsSidebar from './DocsSidebar';
 import ConfirmModal from './ConfirmModal';
 import GraphHistoryPanel from './GraphHistoryPanel';
+import InputModal from './InputModal';
 import { abiLooksLikeGraphIndexable, getGraphUserPrefs, resolveRegisterKind, setGraphUserPrefs } from '../utils/graphConstants';
 import { isGraphRegisterConfigured, waitForIndexedContract } from '../utils/graphClient';
 import { registerContractForIndexing } from '../utils/graphRegister';
-import InputModal from './InputModal';
+import { abiLooksLikeCounterHook } from '../utils/hookMiner';
+import { deployCounterHookCreate2 } from '../utils/counterHookCreate2';
+import { getSepoliaPoolManager } from '../utils/uniswapConstants';
+import { asAbiArray } from '../types/abi';
 import AethonTerminal from './AethonTerminal';
 import { BrandLogo } from './BrandLogo';
 import { lsGet, sessionGet, sessionSet } from '../utils/aethonStorage';
@@ -320,12 +324,14 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
               mode?: string;
               endpoint?: string;
               registry?: string;
+              autoRegister?: boolean;
             } | null;
             if (gp && typeof gp === 'object') {
               setGraphUserPrefs({
                 mode: gp.mode === 'studio' ? 'studio' : 'platform',
                 endpoint: typeof gp.endpoint === 'string' ? gp.endpoint : '',
                 registry: typeof gp.registry === 'string' ? gp.registry : '',
+                autoRegister: gp.autoRegister !== false,
               });
             }
           }
@@ -1606,18 +1612,25 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
     }
 
     const runPromoteConfirm = (creNote: string) => {
+    const isCounterHookPromote = abiLooksLikeCounterHook(promoteAbi);
     setConfirmModal({
       title: 'Promote to Live Network',
       message:
         'You are about to deploy this contract to a live network via MetaMask.\n\n' +
         '• Gas fees will be real and subject to network conditions.\n' +
         '• Line-by-line Gas Heatmaps are unavailable for promoted contracts.\n' +
+        (isCounterHookPromote
+          ? '• CounterHook will use Uniswap v4 CREATE2 (flag-mined address) + sandboxBumpAfterSwap.\n'
+          : '') +
         creNote,
-      confirmLabel: 'Promote',
+      confirmLabel: isCounterHookPromote ? 'Promote (CREATE2)' : 'Promote',
       isDangerous: false,
       onConfirm: async () => {
         try {
-          if (abiHasConstructorArgs(promoteAbi as unknown[] | undefined)) {
+          if (
+            abiHasConstructorArgs(promoteAbi as unknown[] | undefined) &&
+            !isCounterHookPromote
+          ) {
             setConfirmModal({
               title: 'Constructor Arguments Required',
               message:
@@ -1644,26 +1657,63 @@ const IDELayout: React.FC<IDELayoutProps> = ({ userId, isNewUser }) => {
               `Wallet chain mismatch (UI ${chainId} vs provider ${liveChainId}). Reconnect and try again.`
             );
           }
-          const processedArgs = promoteAbi
-            ? parseConstructorArgsFromAbi(promoteAbi as unknown[], {})
-            : [];
-          const factory = new ethers.ContractFactory(
-            promoteAbi as any,
-            promoteBytecode,
-            signer
-          );
-          const deployTx = await factory.deploy(...processedArgs);
-          const receipt = await deployTx.deploymentTransaction()?.wait();
-          const realAddress = await deployTx.getAddress();
+
+          let realAddress: string;
+          let receiptHash = '';
+          let receiptBlock = 0;
+          let receiptGas = 0;
+          let processedArgs: unknown[] = [];
+
+          if (isCounterHookPromote) {
+            const abiList = asAbiArray(promoteAbi);
+            const ctor = abiList.find(
+              (item) => item && (item as { type?: string }).type === 'constructor'
+            ) as { inputs?: ConstructorInput[] } | undefined;
+            const ctorInputs = ctor?.inputs ?? [];
+            const poolManager = getSepoliaPoolManager();
+            const rawArgs: Record<string, string> = {};
+            ctorInputs.forEach((input, index) => {
+              const key = constructorArgKey(input, index);
+              rawArgs[key] = input.type === 'address' ? poolManager : '';
+            });
+            processedArgs = parseConstructorArgs(ctorInputs, rawArgs);
+            const deployed = await deployCounterHookCreate2({
+              signer,
+              provider: liveProvider,
+              abi: promoteAbi as ethers.InterfaceAbi,
+              bytecode: promoteBytecode!,
+              constructorArgs: processedArgs,
+            });
+            realAddress = deployed.address;
+            receiptHash = deployed.deployTxHash || deployed.bumpTxHash;
+            receiptBlock = deployed.blockNumber;
+            receiptGas = deployed.gasUsed;
+          } else {
+            processedArgs = promoteAbi
+              ? parseConstructorArgsFromAbi(promoteAbi as unknown[], {})
+              : [];
+            const factory = new ethers.ContractFactory(
+              promoteAbi as ethers.InterfaceAbi,
+              promoteBytecode,
+              signer
+            );
+            const deployTx = await factory.deploy(...processedArgs);
+            const receipt = await deployTx.deploymentTransaction()?.wait();
+            realAddress = await deployTx.getAddress();
+            receiptHash = receipt?.hash || '';
+            receiptBlock = receipt?.blockNumber || 0;
+            receiptGas = Number(receipt?.gasUsed || 0n);
+          }
+
           const promotedEntry: SimulatedDeployment = {
             network: networkName || 'Unknown Network',
-            transactionHash: receipt?.hash || '',
+            transactionHash: receiptHash,
             contractAddress: realAddress,
             status: 'confirmed',
-            gasUsed: Number(receipt?.gasUsed || 0n),
+            gasUsed: receiptGas,
             deployer: account || '',
             timestamp: new Date().toISOString(),
-            blockNumber: receipt?.blockNumber || 0,
+            blockNumber: receiptBlock,
             isRealChain: true,
             abi: promoteAbi as SimulatedDeployment['abi'],
             bytecode: promoteBytecode,

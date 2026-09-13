@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DEFAULT_GAS_LIMIT, MIN_GAS_LIMIT, MAX_GAS_LIMIT } from '../constants/gas';
 import { CompilationResult } from '../utils/hardhatCompiler';
-import { ethers, ContractFactory, Interface, InterfaceAbi, concat } from 'ethers';
+import { ethers, ContractFactory, InterfaceAbi } from 'ethers';
 import { SimulatedDeployment } from '../types';
 import { browserVM } from '../utils/browserVM';
 import {
@@ -25,19 +25,11 @@ import type { SaveDeploymentPayload } from '../utils/userData';
 import { creAllowsLiveDeploy } from '../utils/creClient';
 import { isCreGateEnabled } from '../utils/creConstants';
 import { SEPOLIA_CHAIN_ID } from '../utils/ethUsdConstants';
-import {
-  abiLooksLikeCounterHook,
-  addressMatchesFlags,
-  COUNTER_HOOK_FLAGS,
-  CREATE2_DEPLOYER,
-  create2DeployCalldata,
-  hashInitCode,
-  mineHookSalt,
-} from '../utils/hookMiner';
+import { abiLooksLikeCounterHook } from '../utils/hookMiner';
+import { deployCounterHookCreate2 } from '../utils/counterHookCreate2';
 import {
   getCounterHookAddress,
   getSepoliaPoolManager,
-  setCounterHookAddress,
 } from '../utils/uniswapConstants';
 import { priceService } from '../utils/PriceService';
 
@@ -195,85 +187,32 @@ const CompileOutput: React.FC<CompileOutputProps> = ({
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const net = await provider.getNetwork();
-      if (Number(net.chainId) !== SEPOLIA_CHAIN_ID) {
-        setDeploymentError(
-          `Wrong network: MetaMask is on chain ${Number(net.chainId)}. Switch to Sepolia (${SEPOLIA_CHAIN_ID}) before CREATE2 deploy.`
-        );
-        return;
-      }
-
       const signer = await provider.getSigner();
-      const deployerAddress = await signer.getAddress();
       const abi = result.abi as InterfaceAbi;
       const processedArgs = parseConstructorArgs(constructorInputs, constructorArgs);
 
-      const iface = new Interface(abi);
-      const encodedArgs = iface.encodeDeploy(processedArgs);
-      const bytecode = result.bytecode.startsWith('0x') ? result.bytecode : `0x${result.bytecode}`;
-      const initCode = concat([bytecode, encodedArgs]);
-      const initCodeHash = hashInitCode(initCode);
-
-      setCreate2Info(
-        `Mining CREATE2 salt for flag-encoded address (0x${COUNTER_HOOK_FLAGS.toString(16)})…`
-      );
-
-      const mined = mineHookSalt({
-        initCodeHash,
-        flags: COUNTER_HOOK_FLAGS,
-        msgSender: deployerAddress,
+      const deployed = await deployCounterHookCreate2({
+        signer,
+        provider,
+        abi,
+        bytecode: result.bytecode,
+        constructorArgs: processedArgs,
+        onProgress: (msg) => {
+          if (msg.includes('sandboxBumpAfterSwap') || msg.includes('afterSwapCount')) {
+            setBumpInfo(msg);
+          } else {
+            setCreate2Info(msg);
+          }
+        },
       });
 
-      if (!addressMatchesFlags(mined.address, COUNTER_HOOK_FLAGS)) {
-        throw new Error('Internal error: mined address does not match required hook flags');
-      }
-
-      setCreate2Info(
-        `Mined salt in ${mined.iterations} iterations → ${mined.address} (CREATE2 deployer ${CREATE2_DEPLOYER.slice(0, 10)}…)`
-      );
-
-      const codeAt = await provider.getCode(mined.address);
-      let txHash = '';
-
-      if (codeAt && codeAt !== '0x') {
-        setCreate2Info(`Hook already deployed at ${mined.address} — skipping CREATE2 tx.`);
-      } else {
-        setCreate2Info(`Sending CREATE2 deploy tx → ${mined.address}…`);
-        const tx = await signer.sendTransaction({
-          to: CREATE2_DEPLOYER,
-          data: create2DeployCalldata(mined.salt, initCode),
-        });
-        txHash = tx.hash;
-        const receipt = await tx.wait();
-        if (!receipt || receipt.status !== 1) {
-          throw new Error('CREATE2 deploy transaction reverted');
-        }
-        txHash = receipt.hash;
-      }
-
-      const deployedCode = await provider.getCode(mined.address);
-      if (!deployedCode || deployedCode === '0x') {
-        throw new Error(`CREATE2 failed — no code at ${mined.address}`);
-      }
-
-      setCounterHookAddress(mined.address);
-
-      const hook = new ethers.Contract(mined.address, abi, signer);
-      setBumpInfo('Calling sandboxBumpAfterSwap() as Continuity proof…');
-      const bumpTx = await hook.sandboxBumpAfterSwap();
-      const bumpReceipt = await bumpTx.wait();
-      const afterSwapCount = await hook.afterSwapCount();
-      setBumpInfo(
-        `sandboxBumpAfterSwap() confirmed (tx ${bumpReceipt?.hash?.slice(0, 10)}…) — afterSwapCount = ${afterSwapCount.toString()}`
-      );
-
       const deploymentEntry: SimulatedDeployment = {
-        contractAddress: mined.address,
-        transactionHash: txHash || bumpReceipt?.hash || '',
+        contractAddress: deployed.address,
+        transactionHash: deployed.deployTxHash || deployed.bumpTxHash,
         network: networkName || 'Sepolia',
-        blockNumber: bumpReceipt?.blockNumber || 0,
-        gasUsed: bumpReceipt ? Number(bumpReceipt.gasUsed) : 0,
-        deployer: account || deployerAddress,
+        blockNumber: deployed.blockNumber,
+        gasUsed: deployed.gasUsed,
+        deployer: account || deployed.deployer,
         timestamp: new Date().toISOString(),
         status: 'confirmed',
         isRealChain: true,

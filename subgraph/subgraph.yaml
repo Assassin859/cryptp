@@ -21,6 +21,8 @@ dataSources:
           file: ./abis/CryptPIndexRegistry.json
         - name: SimpleStorage
           file: ./abis/SimpleStorage.json
+        - name: AuditFirewallConsumer
+          file: ./abis/AuditFirewallConsumer.json
       eventHandlers:
         - event: ContractRegistered(indexed address,indexed address,indexed bytes32)
           handler: handleContractRegistered
@@ -44,3 +46,21 @@ templates:
         - event: ValueChanged(indexed address,uint256)
           handler: handleValueChanged
       file: ./src/simple-storage.ts
+  - kind: ethereum/contract
+    name: AuditFirewallConsumer
+    network: sepolia
+    source:
+      abi: AuditFirewallConsumer
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - VerdictReceived
+      abis:
+        - name: AuditFirewallConsumer
+          file: ./abis/AuditFirewallConsumer.json
+      eventHandlers:
+        - event: VerdictReceived(uint8,uint8,indexed bytes32,uint64,indexed address)
+          handler: handleVerdictReceived
+      file: ./src/audit-firewall.ts

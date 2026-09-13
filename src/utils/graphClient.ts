@@ -22,6 +22,19 @@ export interface IndexedContractRow {
   blockNumber: string;
 }
 
+/** Indexed AuditFirewallConsumer VerdictReceived (1=ALLOW, 2=DENY, 3=MANUAL_REVIEW). */
+export interface VerdictReceivedRow {
+  id: string;
+  contract: string;
+  verdictCode: number;
+  riskMask: number;
+  sourceHash: string;
+  reporter: string;
+  blockNumber: string;
+  blockTimestamp: string;
+  transactionHash: string;
+}
+
 export class GraphClientError extends Error {
   constructor(
     message: string,
@@ -131,6 +144,35 @@ export async function fetchValueChangedForContract(
     { contract, first }
   );
   return data.valueChangeds ?? [];
+}
+
+export async function fetchVerdictReceivedForContract(
+  contractAddress: string,
+  first = 20
+): Promise<VerdictReceivedRow[]> {
+  const contract = normalizeAddress(contractAddress);
+  const data = await querySubgraph<{ verdictReceiveds: VerdictReceivedRow[] }>(
+    `query ($contract: Bytes!, $first: Int!) {
+      verdictReceiveds(
+        first: $first
+        orderBy: blockTimestamp
+        orderDirection: desc
+        where: { contract: $contract }
+      ) {
+        id
+        contract
+        verdictCode
+        riskMask
+        sourceHash
+        reporter
+        blockNumber
+        blockTimestamp
+        transactionHash
+      }
+    }`,
+    { contract, first }
+  );
+  return data.verdictReceiveds ?? [];
 }
 
 export function isGraphConfigured(): boolean {
