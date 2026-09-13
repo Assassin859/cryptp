@@ -96,21 +96,38 @@ export async function loadGraphAuditContext(
     };
   }
   try {
-    const [indexed, events, verdicts] = await Promise.all([
+    // Core queries first — do not Promise.all with verdictReceiveds.
+    // Live Studio may still be SimpleStorage-only until subgraph is republished.
+    const [indexed, events] = await Promise.all([
       fetchIndexedContract(contractAddress),
       fetchValueChangedForContract(contractAddress, 5),
-      fetchVerdictReceivedForContract(contractAddress, 5),
     ]);
+
+    let verdicts: VerdictReceivedRow[] = [];
+    let verdictNote = '';
+    try {
+      verdicts = await fetchVerdictReceivedForContract(contractAddress, 5);
+      verdictNote = `\n${formatVerdictReceivedBlurb(verdicts)}`;
+    } catch (ve) {
+      const msg = ve instanceof Error ? ve.message : String(ve);
+      // Old Studio without VerdictReceived entity — keep ValueChanged / registration working.
+      if (/verdictReceiveds|no field|Cannot query field/i.test(msg)) {
+        verdictNote =
+          '\n- VerdictReceived not in this subgraph yet (republish Studio with AuditFirewall template).';
+      } else {
+        verdictNote = `\n- VerdictReceived query failed — ${msg}`;
+      }
+    }
+
     const registered = Boolean(indexed);
     const base = formatValueChangedBlurb(events, { registered });
-    const verdictBlurb = formatVerdictReceivedBlurb(verdicts);
     const kindNote = indexed?.kind
       ? `\n- Registry kind: ${indexed.kind}`
       : '';
     return {
       configured: true,
       registered,
-      summary: `${base}\n${verdictBlurb}${kindNote}`,
+      summary: `${base}${verdictNote}${kindNote}`,
       events,
       verdicts,
     };

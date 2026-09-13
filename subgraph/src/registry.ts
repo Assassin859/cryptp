@@ -28,10 +28,12 @@ export function handleContractRegistered(event: ContractRegistered): void {
   entity.blockNumber = event.block.number;
   entity.save();
 
-  // Event templates: SimpleStorage ValueChanged; AuditFirewall VerdictReceived.
-  // CounterHook still gets IndexedContract for Continuity verify (AfterSwap template later).
+  // Event templates per Continuity kind.
   if (kind.equals(KIND_SIMPLE_STORAGE)) {
     DataSourceTemplate.create("SimpleStorage", [contractAddress.toHexString()]);
+  }
+  if (kind.equals(KIND_COUNTER_HOOK)) {
+    DataSourceTemplate.create("CounterHook", [contractAddress.toHexString()]);
   }
   if (kind.equals(KIND_AUDIT_FIREWALL)) {
     DataSourceTemplate.create("AuditFirewallConsumer", [contractAddress.toHexString()]);

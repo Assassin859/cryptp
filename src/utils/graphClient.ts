@@ -35,6 +35,17 @@ export interface VerdictReceivedRow {
   transactionHash: string;
 }
 
+/** Indexed CounterHook AfterSwapCounted → HookAfterSwap entity. */
+export interface HookAfterSwapRow {
+  id: string;
+  contract: string;
+  caller: string;
+  newCount: string;
+  blockNumber: string;
+  blockTimestamp: string;
+  transactionHash: string;
+}
+
 export class GraphClientError extends Error {
   constructor(
     message: string,
@@ -173,6 +184,33 @@ export async function fetchVerdictReceivedForContract(
     { contract, first }
   );
   return data.verdictReceiveds ?? [];
+}
+
+export async function fetchHookAfterSwapForContract(
+  contractAddress: string,
+  first = 50
+): Promise<HookAfterSwapRow[]> {
+  const contract = normalizeAddress(contractAddress);
+  const data = await querySubgraph<{ hookAfterSwaps: HookAfterSwapRow[] }>(
+    `query ($contract: Bytes!, $first: Int!) {
+      hookAfterSwaps(
+        first: $first
+        orderBy: blockTimestamp
+        orderDirection: desc
+        where: { contract: $contract }
+      ) {
+        id
+        contract
+        caller
+        newCount
+        blockNumber
+        blockTimestamp
+        transactionHash
+      }
+    }`,
+    { contract, first }
+  );
+  return data.hookAfterSwaps ?? [];
 }
 
 export function isGraphConfigured(): boolean {

@@ -31,7 +31,8 @@
     "smoke:fast": "playwright test tests/e2e/mobile-shell.spec.ts",
     "smoke:full": "playwright test",
     "smoke:chromium": "playwright test --project=chromium --headed",
-    "smoke:ui": "playwright test --ui"
+    "smoke:ui": "playwright test --ui",
+    "demo:judge": "node scripts/record-judge-continuity-demo.mjs"
   },
   "dependencies": {
     "@ethereumjs/common": "4.1.0",

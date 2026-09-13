@@ -21,6 +21,8 @@ dataSources:
           file: ./abis/CryptPIndexRegistry.json
         - name: SimpleStorage
           file: ./abis/SimpleStorage.json
+        - name: CounterHook
+          file: ./abis/CounterHook.json
         - name: AuditFirewallConsumer
           file: ./abis/AuditFirewallConsumer.json
       eventHandlers:
@@ -46,6 +48,24 @@ templates:
         - event: ValueChanged(indexed address,uint256)
           handler: handleValueChanged
       file: ./src/simple-storage.ts
+  - kind: ethereum/contract
+    name: CounterHook
+    network: sepolia
+    source:
+      abi: CounterHook
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - HookAfterSwap
+      abis:
+        - name: CounterHook
+          file: ./abis/CounterHook.json
+      eventHandlers:
+        - event: AfterSwapCounted(indexed address,uint256)
+          handler: handleAfterSwapCounted
+      file: ./src/counter-hook.ts
   - kind: ethereum/contract
     name: AuditFirewallConsumer
     network: sepolia

@@ -5,6 +5,7 @@ import { useWeb3 } from '../context/Web3Context';
 import {
   abiLooksLikeGraphIndexable,
   abiLooksLikeSimpleStorage,
+  abiLooksLikeAuditFirewall,
   getCustomGraphEndpoint,
   getCustomGraphRegistryAddress,
   getGraphEndpoint,
@@ -19,13 +20,15 @@ import {
   GRAPH_PREFS_EVENT,
   type GraphSourceMode,
 } from '../utils/graphConstants';
+import { abiLooksLikeCounterHook } from '../utils/hookMiner';
 import {
   fetchIndexedContract,
   fetchValueChangedForContract,
+  fetchVerdictReceivedForContract,
+  fetchHookAfterSwapForContract,
   GraphClientError,
   isGraphConfigured,
   isGraphRegisterConfigured,
-  type ValueChangedRow,
 } from '../utils/graphClient';
 import { getErrorMessage } from '../utils/errorMessage';
 
@@ -38,6 +41,14 @@ interface GraphHistoryPanelProps {
   highlightRegister?: boolean;
   onRegistered?: () => void;
 }
+
+type DisplayEvent = {
+  id: string;
+  headline: string;
+  detail: string;
+  blockNumber: string;
+  transactionHash: string;
+};
 
 const SEPOLIA_HINT = 'Sepolia Testnet';
 
@@ -55,7 +66,8 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
   onRegistered,
 }) => {
   const { signer, isConnected, chainId, connect } = useWeb3();
-  const [rows, setRows] = useState<ValueChangedRow[]>([]);
+  const [rows, setRows] = useState<DisplayEvent[]>([]);
+  const [eventLabel, setEventLabel] = useState('Events');
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
@@ -121,10 +133,80 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
     try {
       const indexed = await fetchIndexedContract(address);
       setRegistered(Boolean(indexed));
-      const events = await fetchValueChangedForContract(address);
-      setRows(events);
-      if (indexed && events.length === 0) {
-        setStatus('Indexed — no ValueChanged events yet. Call setValue, then Refresh.');
+
+      let nextStatus: string | null = null;
+      const isStorage = abiLooksLikeSimpleStorage(abi);
+      const isHook = abiLooksLikeCounterHook(abi);
+      const isFirewall = abiLooksLikeAuditFirewall(abi);
+
+      let display: DisplayEvent[] = [];
+      let label = 'Events';
+
+      if (isStorage) {
+        label = 'ValueChanged';
+        const events = await fetchValueChangedForContract(address);
+        display = events.map((e) => ({
+          id: e.id,
+          headline: `value=${e.newValue}`,
+          detail: `setter ${e.setter}`,
+          blockNumber: e.blockNumber,
+          transactionHash: e.transactionHash,
+        }));
+      } else if (isHook) {
+        label = 'AfterSwapCounted';
+        try {
+          const events = await fetchHookAfterSwapForContract(address);
+          display = events.map((e) => ({
+            id: e.id,
+            headline: `afterSwapCount=${e.newCount}`,
+            detail: `caller ${e.caller}`,
+            blockNumber: e.blockNumber,
+            transactionHash: e.transactionHash,
+          }));
+        } catch (ve) {
+          const msg = ve instanceof Error ? ve.message : String(ve);
+          if (!/hookAfterSwaps|no field|Cannot query field/i.test(msg)) throw ve;
+          nextStatus =
+            'IndexedContract OK — republish subgraph for AfterSwapCounted (hookAfterSwaps).';
+        }
+      } else if (isFirewall) {
+        label = 'VerdictReceived';
+        try {
+          const events = await fetchVerdictReceivedForContract(address);
+          display = events.map((e) => {
+            const code = Number(e.verdictCode);
+            const name =
+              code === 1 ? 'ALLOW' : code === 2 ? 'DENY' : code === 3 ? 'MANUAL_REVIEW' : `code=${code}`;
+            return {
+              id: e.id,
+              headline: `verdict ${name}`,
+              detail: `riskMask=${e.riskMask} · reporter ${e.reporter}`,
+              blockNumber: e.blockNumber,
+              transactionHash: e.transactionHash,
+            };
+          });
+        } catch (ve) {
+          const msg = ve instanceof Error ? ve.message : String(ve);
+          if (!/verdictReceiveds|no field|Cannot query field/i.test(msg)) throw ve;
+          nextStatus =
+            'IndexedContract OK — republish subgraph for VerdictReceived (verdictReceiveds).';
+        }
+      }
+
+      setEventLabel(label);
+      setRows(display);
+      if (indexed && display.length === 0) {
+        if (nextStatus) {
+          setStatus(nextStatus);
+        } else if (isStorage) {
+          setStatus('Indexed — no ValueChanged events yet. Call setValue, then Refresh.');
+        } else if (isHook) {
+          setStatus('Indexed — no AfterSwapCounted yet. Call sandboxBumpAfterSwap, then Refresh.');
+        } else if (isFirewall) {
+          setStatus('Indexed — no VerdictReceived yet. Record a CRE verdict, then Refresh.');
+        }
+      } else if (nextStatus) {
+        setStatus(nextStatus);
       }
     } catch (e) {
       if (e instanceof GraphClientError && e.code === 'missing_endpoint') {
@@ -137,7 +219,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [address, endpoint]);
+  }, [address, endpoint, abi]);
 
   useEffect(() => {
     if (canIndex && configured) {
@@ -391,7 +473,7 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
         <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">
-          {abiLooksLikeSimpleStorage(abi) ? `ValueChanged (${rows.length})` : `Indexed status · events (${rows.length})`}
+          {eventLabel} ({rows.length})
         </p>
         {rows.length === 0 ? (
           <p className="text-gray-600 italic text-[11px] p-2">No indexed events yet.</p>
@@ -403,12 +485,10 @@ const GraphHistoryPanel: React.FC<GraphHistoryPanelProps> = ({
                 className="rounded border border-[#2d2d2d] bg-[#1e1e1e] p-2.5 space-y-1"
               >
                 <div className="flex justify-between gap-2">
-                  <span className="text-blue-400 font-mono">value={row.newValue}</span>
+                  <span className="text-blue-400 font-mono">{row.headline}</span>
                   <span className="text-gray-600">block {row.blockNumber}</span>
                 </div>
-                <p className="text-gray-500 font-mono text-[10px] truncate">
-                  setter {row.setter}
-                </p>
+                <p className="text-gray-500 font-mono text-[10px] truncate">{row.detail}</p>
                 <p className="text-gray-600 font-mono text-[9px] truncate">
                   tx {row.transactionHash}
                 </p>

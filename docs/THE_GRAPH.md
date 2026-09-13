@@ -61,9 +61,14 @@ npm run build
 
 Details: [subgraph/README.md](../subgraph/README.md).
 
-## What is indexed (v1)
+## What is indexed (v1+)
 
-- Kind `keccak256("SimpleStorage")` only.
-- Event: `ValueChanged(address indexed setter, uint256 newValue)`.
+| Kind | Continuity verify | Events |
+|------|-------------------|--------|
+| SimpleStorage | IndexedContract | ValueChanged |
+| CounterHook | IndexedContract | AfterSwapCounted → HookAfterSwap (after Studio republish) |
+| AuditFirewallConsumer | IndexedContract | VerdictReceived (after Studio republish) |
 
 Sandbox / Local Simulation deploys are **not** indexed (The Graph reads the chain, not browserVM).
+
+After changing `subgraph/`, operators must **codegen + build + Studio deploy** so the live endpoint exposes `verdictReceiveds` and `hookAfterSwaps`. Until then the IDE soft-skips those fields.
